@@ -235,6 +235,7 @@ def regenerate_results_for_record(record: Record, options, modules: List[ModuleT
         results = None
         if section:
             logging.debug("Regenerating results for module %s", module.__name__)
+            logging.debug("Section is type {}".format(type(section)))
             results = module.regenerate_previous_results(section, record, options)
             if not results:
                 logging.debug("Results could not be generated for %s", module.__name__)
@@ -446,7 +447,7 @@ def read_data(sequence_file, options) -> serialiser.AntismashResults:
         records = record_processing.parse_input_sequence(sequence_file, options.taxon,
                                 options.minlength, options.start, options.end)
         return serialiser.AntismashResults(sequence_file.rsplit(os.sep, 1)[-1],
-                                           records, [{}] * len(records),
+                                           records, [{} for i in range(len(records))],
                                            __version__)
 
     logging.debug("Attempting to reuse previous results in: %s", options.reuse_results)
@@ -596,6 +597,7 @@ def run_antismash(sequence_file: Optional[str], options) -> int:
         # skip if we're not interested in it
         if seq_record.skip:
             continue
+        logging.debug("Processing {} with results {}".format(seq_record.id,previous_result))
         timings = run_detection(seq_record, options, previous_result)
         # and skip analysis if detection didn't find anything
         if not seq_record.get_clusters():
