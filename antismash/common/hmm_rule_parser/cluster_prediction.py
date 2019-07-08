@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from Bio.SearchIO._model.hsp import HSP
 
 from antismash.common import fasta, path, serialiser
-from antismash.common.secmet import Record, Protocluster, CDSFeature, FeatureLocation
+from antismash.common.secmet import Record, Protocluster, CDSFeature, FeatureLocation, Feature
 from antismash.common.secmet.locations import location_contains_other
 from antismash.common.secmet.qualifiers import GeneFunction, SecMetQualifier
 from antismash.common.subprocessing import run_hmmsearch
@@ -155,7 +155,8 @@ def remove_redundant_protoclusters(clusters: List[Protocluster],
 
 
 def find_protoclusters(record: Record, cds_by_cluster_type: Dict[str, Set[str]],
-                       rules_by_name: Dict[str, rule_parser.DetectionRule]) -> List[Protocluster]:
+                       rules_by_name: Dict[str, rule_parser.DetectionRule],
+                       dmz_cds: Optional[Feature] = None) -> List[Protocluster]:
     """ Detects gene clusters based on the identified core genes """
     clusters = []  # type: List[Protocluster]
 
@@ -180,6 +181,11 @@ def find_protoclusters(record: Record, cds_by_cluster_type: Dict[str, Set[str]],
             real_start = min(contained.location.start for contained in surrounding_cdses)
             real_end = max(contained.location.end for contained in surrounding_cdses)
             surrounds = FeatureLocation(real_start, real_end)
+            if dmz_cds and dmz_cds.overlaps_with(surrounds):
+                if core_location.start < dmz_cds.location.start:
+                    surrounds = FeatureLocation(surrounds.start, dmz_cds.location.start - 1)
+                else:
+                    surrounds = FeatureLocation(dmz_cds.location.end, surrounds.end)
             clusters.append(Protocluster(core_location, surrounding_location=surrounds,
                                     tool="rule-based-clusters", cutoff=cutoff,
                                     neighbourhood_range=rule.neighbourhood, product=cluster_type,
@@ -189,6 +195,11 @@ def find_protoclusters(record: Record, cds_by_cluster_type: Dict[str, Set[str]],
         # finalise the last cluster
         surrounds = FeatureLocation(max(0, core_location.start - rule.neighbourhood),
                                     min(core_location.end + rule.neighbourhood, len(record)))
+        if dmz_cds and dmz_cds.overlaps_with(surrounds):
+            if core_location.start < dmz_cds.location.start:
+                surrounds = FeatureLocation(surrounds.start, dmz_cds.location.start - 1)
+            else:
+                surrounds = FeatureLocation(dmz_cds.location.end, surrounds.end)
         clusters.append(Protocluster(core_location, surrounding_location=surrounds,
                                 tool="rule-based-clusters", cutoff=cutoff,
                                 neighbourhood_range=rule.neighbourhood, product=cluster_type,
@@ -308,7 +319,8 @@ def create_rules(rule_file: str, signature_names: Set[str],
 
 
 def apply_cluster_rules(record: Record, results_by_id: Dict[str, List[HSP]],
-                        rules: List[rule_parser.DetectionRule]
+                        rules: List[rule_parser.DetectionRule],
+                        dmz_cds: Optional[Feature] = None
                         ) -> Tuple[Dict[str, Dict[str, Set[str]]],
                                    Dict[str, Set[str]]]:
     """
@@ -341,12 +353,19 @@ def apply_cluster_rules(record: Record, results_by_id: Dict[str, List[HSP]],
     cluster_type_hits = defaultdict(set)  # type: Dict[str, Set[str]]
     for cds_name in cds_with_hits:
         feature = record.get_cds_by_name(cds_name)
+        if feature is dmz_cds:
+            continue
         feature_start, feature_end = sorted([feature.location.start, feature.location.end])
         rule_texts = []
         info_by_range = {}  # type: Dict[int, Tuple[Dict[str, CDSFeature], Dict[str, List[HSP]]]]
         for rule in rules:
             if rule.cutoff not in info_by_range:
                 location = FeatureLocation(feature_start - rule.cutoff, feature_end + rule.cutoff)
+                if dmz_cds and dmz_cds.overlaps_with(location):
+                    if feature < dmz_cds:
+                        location = FeatureLocation(feature_start - rule.cutoff, dmz_cds.location.start)
+                    else:
+                        location = FeatureLocation(dmz_cds.location.end, feature_end + rule.cutoff)
                 nearby = record.get_cds_features_within_location(location, with_overlapping=True)
                 nearby_features = {neighbour.get_name(): neighbour for neighbour in nearby}
                 nearby_results = {neighbour: results_by_id[neighbour]
@@ -365,7 +384,9 @@ def apply_cluster_rules(record: Record, results_by_id: Dict[str, List[HSP]],
 
 
 def detect_protoclusters_and_signatures(record: Record, signature_file: str, seeds_file: str,
-                                        rule_files: List[str], filter_file: str, tool: str) -> RuleDetectionResults:
+                                        rule_files: List[str], filter_file: str, tool: str,
+                                        demarcation_point: int = 0, demarcation_cds_name: Optional[str] = None,
+                                        ) -> RuleDetectionResults:
     """ Compares all CDS features in a record with HMM signatures and generates
         Protocluster features based on those hits and the current protocluster detection
         rules.
@@ -378,6 +399,10 @@ def detect_protoclusters_and_signatures(record: Record, signature_file: str, see
             rule_files: the files containing the rules to use for cluster definition
             filter_file: a file containing equivalence sets of HMMs
             tool: the name of the tool providing the HMMs (e.g. clusterfinder, rule_based_clusters)
+            demarcation_point: a single integer location on the genome that no clusters
+                               can be formed over
+            demarcation_cds_name: a single existing CDS name to use as an extended version
+                                  of the demarcation_point (if point is supplied, it will be used instead)
     """
     if not rule_files:
         raise ValueError("rules must be provided")
@@ -417,15 +442,28 @@ def detect_protoclusters_and_signatures(record: Record, signature_file: str, see
     # Filter multiple results of the same model in one gene
     results, results_by_id = filter_result_multiple(results, results_by_id)
 
+    # set up the demilitarized zone, if relevant
+    dmz_cds = None  # type: Optional[Feature]
+    if demarcation_point:
+        dmz_cds = Feature(FeatureLocation(demarcation_point, demarcation_point + 1), "dmz_feature")
+    elif demarcation_cds_name:
+        dmz_cds = record.get_cds_by_name(demarcation_cds_name)
+        results_by_id.pop(demarcation_cds_name)
+    # removing all profile hits in any CDS containing the DMZ
+    if dmz_cds:
+        for name in list(results_by_id):
+            if dmz_cds.overlaps_with(record.get_cds_by_name(name)):
+                results_by_id.pop(name)
+
     # Use rules to determine gene clusters
-    cds_domains_by_cluster, cluster_type_hits = apply_cluster_rules(record, results_by_id, rules)
+    cds_domains_by_cluster, cluster_type_hits = apply_cluster_rules(record, results_by_id, rules, dmz_cds)
 
     # Find number of sequences on which each pHMM is based
     num_seeds_per_hmm = get_sequence_counts(signature_file)
 
     # Save final results to record
     rules_by_name = {rule.name: rule for rule in rules}
-    clusters = find_protoclusters(record, cluster_type_hits, rules_by_name)
+    clusters = find_protoclusters(record, cluster_type_hits, rules_by_name, dmz_cds)
     strip_inferior_domains(cds_domains_by_cluster, rules_by_name)
 
     cds_results_by_cluster = {}
