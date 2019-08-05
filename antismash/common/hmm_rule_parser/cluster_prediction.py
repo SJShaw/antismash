@@ -448,7 +448,7 @@ def detect_protoclusters_and_signatures(record: Record, signature_file: str, see
         dmz_cds = Feature(FeatureLocation(demarcation_point, demarcation_point + 1), "dmz_feature")
     elif demarcation_cds_name:
         dmz_cds = record.get_cds_by_name(demarcation_cds_name)
-        results_by_id.pop(demarcation_cds_name)
+        results_by_id.pop(demarcation_cds_name, None)
     # removing all profile hits in any CDS containing the DMZ
     if dmz_cds:
         for name in list(results_by_id):
