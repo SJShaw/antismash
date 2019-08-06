@@ -168,6 +168,11 @@ def find_protoclusters(record: Record, cds_by_cluster_type: Dict[str, Set[str]],
         cutoff = rule.cutoff
         core_location = cds_features[0].location
         for cds in cds_features[1:]:
+            if dmz_cds and dmz_cds.overlaps_with(core_location):
+                if core_location.start < dmz_cds.location.start:
+                    core_location = FeatureLocation(core_location.start, dmz_cds.location.start - 1)
+                else:
+                    core_location = FeatureLocation(dmz_cds.location.end, core_location.end)
             if cds.overlaps_with(FeatureLocation(core_location.start - cutoff,
                                                  core_location.end + cutoff)):
                 core_location = FeatureLocation(min(cds.location.start, core_location.start),
