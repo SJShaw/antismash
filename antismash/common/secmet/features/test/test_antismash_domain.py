@@ -7,6 +7,7 @@
 import unittest
 
 from antismash.common.secmet.features import AntismashDomain, FeatureLocation
+from antismash.common.secmet.test import helpers
 
 
 class TestConversion(unittest.TestCase):
