@@ -682,6 +682,8 @@ def score_clusterblast_output(clusters: Dict[str, ReferenceCluster], allcoregene
                 results[clusters[cluster_label]] = result
                 break
     # Sort gene clusters by score
+    for k, v in sorted(results.items(),  key=lambda x: x[1].sort_score(), reverse=True)[:10]:
+        print(k.accession, v.sort_score())
     return sorted(results.items(), reverse=True, key=lambda x: x[1].sort_score())
 
 
