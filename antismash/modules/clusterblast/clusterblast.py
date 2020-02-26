@@ -54,7 +54,7 @@ def perform_clusterblast(options: ConfigType, record: Record,
         region_number = region.get_region_number()
         cluster_names_to_queries = clusters_by_number.get(region_number, {})
         ranking = score_clusterblast_output(db_clusters, core_gene_accessions,
-                                            cluster_names_to_queries)
+                                            cluster_names_to_queries, region)
 
         # store the results
         result = RegionResult(region, ranking, db_proteins, "general")

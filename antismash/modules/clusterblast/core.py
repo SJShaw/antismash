@@ -581,6 +581,31 @@ def parse_clusterblast_dict(queries: List[Query], clusters: Dict[str, ReferenceC
     return result, hitpositions, hitposcorelist
 
 
+def trim_to_best_hit(queries, cluster):
+    hits_by_reference_gene = defaultdict(list)
+    for query in queries:
+        for subject in query.get_subjects_by_cluster(cluster):
+            hits_by_reference_gene[subject.name].append((query, subject))
+   
+
+    pairs = {}
+    for ref, hits in hits_by_reference_gene.items():
+        for query, subject in hits:
+            pairs[(query.id, subject)] = subject.perc_ident
+
+    best_first = (i[0] for i in sorted(pairs.items(), key=lambda x: x[1], reverse=True))
+
+    mapping = {}
+
+    features = set()
+    for query, subject in best_first:
+        if query in features or subject.name in mapping:
+            continue
+        features.add(query)
+        mapping[subject.name] = (subject, query)
+    return mapping
+
+
 def find_clusterblast_hitsgroups(hitpositions: List[Tuple[int, int]]) -> Dict[int, List[int]]:
     """ Finds groups of hits within a set of pairings
 
@@ -636,8 +661,8 @@ def calculate_synteny_score(hitgroups: Dict[int, List[int]],
 
 
 def score_clusterblast_output(clusters: Dict[str, ReferenceCluster], allcoregenes: Set[str],
-                              cluster_names_to_queries: Dict[str, List[Query]]
-                              ) -> List[Tuple[ReferenceCluster, Score]]:
+                              cluster_names_to_queries: Dict[str, List[Query]],
+                              region) -> List[Tuple[ReferenceCluster, Score]]:
     """ Generate scores for all cluster matches
 
         Scores are calculated as S = h + H + s + S + B, where
@@ -661,10 +686,22 @@ def score_clusterblast_output(clusters: Dict[str, ReferenceCluster], allcoregene
             A list of ReferenceCluster-Score pairs, sorted in order of
             decreasing score.
     """
+
+    pids = []
+
+    region_cores = set()
+    for cds in region.cds_children:
+        if cds.gene_function == secmet.GeneFunction.CORE:
+            region_cores.add(cds.get_name())
+
+
     results = {}
     for cluster_label, queries in cluster_names_to_queries.items():
         single_gene_reference = len(clusters[cluster_label].proteins) == 1
         result, hitpositions, hitposcorelist = parse_clusterblast_dict(queries, clusters, cluster_label, allcoregenes)
+        best = trim_to_best_hit(queries, cluster_label)
+        score = sum(s.perc_ident / 100 for s, q in best.values() if q in allcoregenes) / len(region_cores)
+        pids.append(score)
         if not result.hits:
             continue
         if not single_gene_reference and result.hits <= 1:
@@ -681,9 +718,12 @@ def score_clusterblast_output(clusters: Dict[str, ReferenceCluster], allcoregene
             if subject != initial:
                 results[clusters[cluster_label]] = result
                 break
+
+    with open("cores.tsv", "a") as handle:
+        handle.write("%s\t%s\n" % (os.path.basename(get_config().output_dir), ",".join(map(str, pids))))
     # Sort gene clusters by score
-    for k, v in sorted(results.items(),  key=lambda x: x[1].sort_score(), reverse=True)[:10]:
-        print(k.accession, v.sort_score())
+#    for k, v in sorted(results.items(),  key=lambda x: x[1].sort_score(), reverse=True)[:10]:
+#        print(k.accession, v.sort_score())
     return sorted(results.items(), reverse=True, key=lambda x: x[1].sort_score())
 
 
