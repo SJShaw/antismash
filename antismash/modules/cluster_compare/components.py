@@ -28,27 +28,26 @@ class Components:
 
 
 def calculate_component_score(hits, ref_data):
-    print(list(hits.values())[0].reference_cluster)
     ref = gather_reference_components(ref_data["regions"][0])  # TODO should be handled further up
     # TODO don't repeat the query gather here, do it once per area
     query = gather_query_components(list(hits.values())[0].cds.region)  # TODO use protoclusters/etc
     assert query.nrps, query.nrps
-    loud = list(hits.values())[0].reference_cluster == "BGC0000400.1"
+    loud = list(hits.values())[0].reference_cluster == "BGC0000544.1"
 
     return compare(ref, query, loud)
 
 
 def compare(ref, query, loud):
-    nrps = compare_combos(ref.nrps, query.nrps)
+    nrps = compare_modules(ref.nrps, query.nrps)
     if loud:
         print("nrps", nrps)
-    pks = compare_combos(ref.pks, query.pks)
+    pks = compare_modules(ref.pks, query.pks)
     if loud:
         print("pks", pks)
     secmet = compare_combos(ref.secmet, query.secmet)
     if loud:
         print("secmet", secmet)
-    functions = compare_combos(ref.functions, query.functions)
+    functions = compare_combos(ref.functions, query.functions, loud)  # TODO: skip if a minimal run? smcogs missing will cause scores to plummet
     if loud:
         print("functions", functions)
     max_modules = sum(ref.pks.values()) + sum(ref.nrps.values())
@@ -65,14 +64,20 @@ def compare(ref, query, loud):
     assert 0 <= modules <= 1
     assert 0 <= secmet <= 1
     assert 0 <= functions <= 1
-    return modules * secmet * functions #sum([nrps, pks, secmet, functions]) / 4
+    if max_modules:
+        return (modules * secmet * functions) ** (1/3)#sum([modules, secmet, functions]) / 3
+    else:
+        return (secmet * functions) ** .5
 
 
-def compare_combos(ref, query):
+def compare_combos(ref, query, loud=False):
     if not ref:
         return 1.
     if not query:
         return 0.  # TODO bidirectional, maybe
+    if loud:
+        print("ref", ref)
+        print("query", query)
     ref_combos = set(ref)
     query_combos = set(query)
     ref_extra = ref_combos.difference(query_combos)
@@ -87,7 +92,37 @@ def compare_combos(ref, query):
         found += query[combo]
     return found / max_possible
 
-# TODO secmet should be a single blob
+
+def compare_modules(ref, query, loud=False):
+    if not ref:
+        return 1.
+    if not query:
+        return 0.  # TODO bidirectional, maybe
+    if loud:
+        print("ref", ref)
+        print("query", query)
+    ref_combos = set(ref)
+    query_combos = set(query)
+    ref_extra = ref_combos.difference(query_combos)
+    query_extra = query_combos.difference(ref_combos)
+
+    max_possible = sum(ref.values())  # TODO directionality would be good to have
+
+    assert max_possible
+
+    found = 0
+    for combo in ref_combos.intersection(query_combos):
+        found += query[combo]
+
+    # if they're different, but still complete, then count them as half
+    # as having the same number of modules is still useful even if the
+    # modification domains don't exactly match
+    # TODO: handle trans-AT specifically, as it's very different
+    found += min(0, len(ref_extra - query_extra)) / 2
+
+    return found / max_possible
+
+
 def gather_reference_components(ref_data):
     nrps = defaultdict(int)
     pks = defaultdict(int)
@@ -99,7 +134,8 @@ def gather_reference_components(ref_data):
             functions[cds["function"]] += 1
 
         if cds["components"]["secmet"]:
-            secmet[tuple(cds["components"]["secmet"])] += 1
+            for domain in cds["components"]["secmet"]:
+                secmet[domain] += 1
 
         for module in cds["components"]["modules"]:
             if not module["complete"]:  # TODO check if incomplete is useful
@@ -126,7 +162,8 @@ def gather_query_components(region):
             functions[str(cds.gene_function)] += 1
 
         if cds.sec_met:
-            secmet[tuple(cds.sec_met.domain_ids)] += 1
+            for domain in cds.sec_met.domain_ids:
+                secmet[domain] += 1
 
         for module in cds.modules:
             if not module.is_complete():

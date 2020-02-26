@@ -115,7 +115,7 @@ def run(record: Record):
 
 
 def calculate_final_score(score, max_id):
-    return (score.identity / max_id) * score.order * score.components
+    return ((score.identity / max_id) * score.order * score.components) ** (1/3)
 
 
 def calculate_legacy_identity_score(hits_by_reference_gene):
