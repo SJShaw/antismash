@@ -3,12 +3,26 @@
 
 """ Contains the results classes for the nrps_pks module """
 
-import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Optional
 
 from antismash.common.module_results import ModuleResults
+from antismash.common.secmet import Record
+
 
 class ClusterCompareResults(ModuleResults):
     """ The results of cluster comparison """
     _schema_version = 1
 
+    def __init__(self, record_id, scores) -> None:
+        super().__init__(record_id)
+        self.scores = scores
+
+    def to_json(self) -> Dict[str, Any]:
+        return {}  # TODO
+
+    @staticmethod
+    def from_json(json: Dict[str, Any], record: Record) -> Optional["ClusterCompareResults"]:
+        return None   # TODO
+
+    def add_to_record(self, record: Record) -> None:
+        return  # TODO

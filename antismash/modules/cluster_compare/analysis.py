@@ -84,7 +84,7 @@ class ReferenceScorer:
 
 def run(record: Record):
     if not record.get_regions():
-        return ClusterCompareResults(record.id)
+        return ClusterCompareResults(record.id, [])
 
     # TODO handle custom databases
     with open(path.get_full_path(__file__, "data", "data.json")) as handle:
@@ -111,7 +111,7 @@ def run(record: Record):
 
     # TODO: set scoring/similarity to be by protocluster
 
-    raise NotImplementedError()
+    return ClusterCompareResults(record.id, ranked_scores)
 
 
 def calculate_final_score(score, max_id):
