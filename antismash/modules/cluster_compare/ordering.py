@@ -25,19 +25,21 @@ def calculate_order_score(hits, ref_data):
 def _build_segments_from_pairings(pairings, loud=False):
     segments = [[pairings[0]]]
     if loud:
-        print("prev_pair, pairing, [strandcont, cds_contig, ref_contig]") 
+        print("prev_pair, pairing, [strandcont, cds_contig, ref_contig]")
     for pairing in pairings[1:]:
-        prev_cds, prev_ref, prev_strand_match, prev_strand = segments[-1][-1]
-        cds, ref, strand_match, strand = pairing
-        if any([prev_strand_match != strand_match,  # strands no longer match
-                cds != prev_cds + 1,  # CDSes aren't contiguous
-                abs(ref - prev_ref) != 1,   # references aren't contiguous
-               ]):
+        prev_cds, prev_ref, prev_strand_match = segments[-1][-1]
+        cds, ref, strand_match = pairing
+        if any([
+            prev_strand_match != strand_match,  # strands no longer match
+            cds != prev_cds + 1,  # CDSes aren't contiguous
+            abs(ref - prev_ref) != 1,   # references aren't contiguous
+        ]):
             if loud:
-                print(segments[-1][-1], pairing, [prev_strand_match != strand_match,  # strands no longer match
-                cds != prev_cds + 1,  # CDSes aren't contiguous
-                abs(ref - prev_ref) != 1,   # references aren't contiguous
-               ])
+                print(segments[-1][-1], pairing, [
+                    prev_strand_match != strand_match,  # strands no longer match
+                    cds != prev_cds + 1,  # CDSes aren't contiguous
+                    abs(ref - prev_ref) != 1,   # references aren't contiguous
+                ])
             segments.append([])
         segments[-1].append(pairing)
     if loud:
@@ -50,15 +52,12 @@ def find_segments(hits, features, reference_features, mapping):
     # features should always be sorted
     assert sorted(features) == features
 
-    rev_mapping = {v: k for k, v in mapping.items()}
-
     pairings = []
-    for key, hit in hits.items():
+    for hit in hits.values():
         cds_index = features.index(hit.cds) + 1
         reference_index = int(hit.reference_id)
         reference_strand = 1 if "+" in reference_features[mapping[hit.reference_id]]["location"] else -1
-        pairings.append((cds_index, reference_index, hit.cds.location.strand == reference_strand, reference_strand))
-
+        pairings.append((cds_index, reference_index, hit.cds.location.strand == reference_strand))
 
     pairings.sort()
 
