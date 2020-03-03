@@ -118,29 +118,6 @@ def calculate_final_score(score, max_id):
     return ((score.identity / max_id) * score.order * score.components) ** (1/3)
 
 
-def calculate_legacy_identity_score(hits_by_reference_gene):
-    """
-        As per legacy version, but skipping synteny score and leaving that for ordering
-
-        Legacy:
-        Scores are calculated as S = h + H + s + S + B, where
-            h = number of queries with significant hits
-            H = number of core genes with significant hits
-            s = number of gene pairs with conserved synteny
-            S = number of gene pairs with conserved synteny and a core gene involved
-            B = core gene bonus (3 if core gene has hit in subject cluster, else 0)
-    """
-    score = 0
-    core_bonus = 0  # B
-    for hits in hits_by_reference_gene.values():
-        for hit in hits:
-            score += 1  # h
-            if hit.cds.gene_function == hit.cds.gene_function.CORE:
-                score += 1  # H
-                core_bonus = 3
-    return score + core_bonus
-
-
 def calculate_identity_score(hits):
     return sum(hit.identity_score for hit in hits.values())
 
