@@ -32,12 +32,11 @@ def calculate_component_score(hits, ref_data):
     # TODO don't repeat the query gather here, do it once per area
     query = gather_query_components(list(hits.values())[0].cds.region)  # TODO use protoclusters/etc
     assert query.nrps, query.nrps
-    loud = list(hits.values())[0].reference_cluster == "BGC0000544.1"
 
-    return compare(ref, query, loud)
+    return compare(ref, query)
 
 
-def compare(ref, query, loud):
+def compare(ref, query, loud=False):
     nrps = compare_modules(ref.nrps, query.nrps)
     if loud:
         print("nrps", nrps)
