@@ -52,6 +52,8 @@ def convert_region(region, cds_mapping, cds_index, fasta):
         "products": region.products,
         "protoclusters": [convert_protocluster(pc) for pc in region.get_unique_protoclusters()],
         "cdses": {cds.get_name(): convert_cds(cds) for cds in region.cds_children},
+        "start": region.location.start,
+        "end": region.location.end,
     }
     for cds in region.cds_children:
         index = cds_index.next()

@@ -32,23 +32,34 @@ class RawProtocluster:
         return cls(cores, data["product"], data["location"])
 
 class RawRegion:
-    def __init__(self, protoclusters, cdses, products):
+    def __init__(self, protoclusters, cdses, products, cds_mapping, raw_cdses, start, end):
         self.protoclusters = protoclusters
         self.cdses = cdses
         self.products = products
+        self.cds_mapping = cds_mapping
+        self.raw_cdses = raw_cdses
+        self.start = start
+        self.end = end
 
     @classmethod
-    def from_json(cls, data: Dict[str, Any]) -> "RawRegion":
+    def from_json(cls, data: Dict[str, Any], cds_mapping) -> "RawRegion":
         cdses = {name: RawCDS.from_json(name, cds) for name, cds in data["cdses"].items()}
     
         return cls([RawProtocluster.from_json(proto, cdses) for proto in data["protoclusters"]],
                    cdses,
                    data["products"],
+                   cds_mapping,
+                   data["cdses"],
+                   data["start"],
+                   data["end"],
                   )
 
     @property
     def product_string(self) -> str:
         return ", ".join(self.products)
+
+    def get_cds_json(self) -> str:
+        return self.raw_cdses
 
 
 class RawRecord:
@@ -59,7 +70,7 @@ class RawRecord:
 
     @classmethod
     def from_json(cls, accession: str, data: Dict[str, Any]) -> "RawRegion":
-        regions = [RawRegion.from_json(region) for region in data["regions"]]
+        regions = [RawRegion.from_json(region, data["cds_mapping"]) for region in data["regions"]]
         return RawRecord(accession, regions, data["cds_mapping"])
 
 

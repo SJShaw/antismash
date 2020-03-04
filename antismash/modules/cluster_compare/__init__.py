@@ -17,7 +17,7 @@ from antismash.modules.clusterblast.core import check_clusterblast_files
 
 from .results import ClusterCompareResults
 from .analysis import run
-from .html_output import generate_html, will_handle
+from .html_output import generate_html, will_handle, generate_javascript_data
 
 NAME = "cluster-compare"
 SHORT_DESCRIPTION = "cluster comparison"

@@ -8,7 +8,7 @@ from typing import Any, Dict, List
 from antismash.common import path
 from antismash.common.html_renderer import HTMLSections, FileTemplate, Markup
 from antismash.common.layers import RegionLayer, RecordLayer, OptionsLayer
-from antismash.common.secmet import Record
+from antismash.common.secmet import Record, Region, locations
 
 from .results import ClusterCompareResults
 
@@ -50,37 +50,39 @@ def generate_div(region_layer: RegionLayer, record_layer: RecordLayer,
     return template.render(record=record_layer, region=region_layer, options=options_layer, tooltip=tooltip, results=results)
 
 
-def generate_javascript_data(record: Record, results: ClusterCompareResults) -> Dict[str, Any]:
+def generate_javascript_data(record: Record, _region: Region, results: ClusterCompareResults) -> Dict[str, Any]:
     data = {
         "reference_clusters": {},
     }
     known = results.scores  # TODO
     assert known
-    for _, score in known[:10]:  # TODO: use actual set
-        assert ref.protein_details, ref
-        genes = ref.cdses
+    for accession, score in known[:10]:  # TODO: use actual set
+        ref = score.reference
+        genes = ref.get_cds_json()
         ref_entry = {  # TODO: merge these for different protoclusters
             "links": [],
+            "start": ref.start,
+            "end": ref.end,
         }
-        data["reference_clusters"][ref.get_name()] = ref_entry
+        data["reference_clusters"][accession] = ref_entry
 
         mismatching_strands = 0
-        for query, subject in score.scored_pairings:
-            query_cds = record.get_cds_by_name(query.id)
+        for ref_cds_id, hit in score.hits_by_gene.items():
+            query_cds = hit.cds
             query_point = query_cds.location.start + (query_cds.location.end - query_cds.location.start) // 2
-            subject_point = subject.start + (subject.end - subject.start) // 2
-            if query_cds.location.strand != (-1 if subject.strand == "-" else 1):
+            ref_cds = score.reference.cdses[score.reference.cds_mapping[ref_cds_id]]
+            ref_location = locations.location_from_string(ref_cds.location)
+            subject_point = ref_location.start + (ref_location.end - ref_location.start) // 2
+            if query_cds.location.strand != (-1 if ref_location.strand == "-" else 1):
                 mismatching_strands += 1
-            genes.get(subject.locus_tag, genes.get(subject.name))["linked"] = True
+            genes[ref_cds.name]["linked"] = True
             ref_entry["links"].append({
-                "query": query.id,
-                "subject": subject.locus_tag,
+                "query": query_cds.get_name(),
+                "subject": ref_cds.name,
                 "query_loc": query_point,
                 "subject_loc": subject_point,
             })
         ref_entry["reverse"] = mismatching_strands > len(ref_entry["links"]) / 2
         ref_entry["genes"] = list(genes.values())
-        ref_entry["start"] = min(x["start"] for x in ref_entry["genes"])
-        ref_entry["end"] = max(x["end"] for x in ref_entry["genes"])
         print(ref, len(ref_entry["links"]))
     return data
