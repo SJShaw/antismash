@@ -1,0 +1,35 @@
+<div class = "cluster-compare-known">
+    <div class="heading">
+      <span>Similar known gene clusters</span>
+      {{help_tooltip(tooltip, "cluster-compare-known")}}
+    </div>
+  {% if results %}
+  <div id="cb-comparison-container-{{region.anchor_id}}"></div>
+  <table class="cb-heat-table">
+    <tr>
+     <th>MiBIG id</th>
+     {% for proto in region.get_unique_protoclusters() %}
+     <th><span class="cb-heat-product">{{proto.product}}</span></th>
+     {% endfor %}
+     <th>Similarity score</th>
+     <th>Type</th>
+     <th>Compound(s)</th>
+    </tr>
+    {% for ref, score in results %}
+        <tr class="cb-heat-row" data-accession="{{ref}}">
+        <td><a href="https://mibig.secondarymetabolites.org/go/{{ref}}/1">{{ref}}</a></td>
+            {% set perc = "{:.0f}".format(score.final_score*100) %}
+            {% set colour = "rgb(0, 0, 0, {:.2f})".format(score.final_score) %}
+         {% for proto in region.get_unique_protoclusters() %}
+            <td class="cb-heat-cell" title="0.{{perc}}" style="background-image: linear-gradient(to top, {{colour}}, {{colour}} {{perc}}%, white {{perc}}%)"></td>
+     {% endfor %}
+        <td>{{"{:.2f}".format(score.final_score)}}</td>
+        <td>{{score.reference.product_string}}</td>
+        <td>{{"missing description"}}</td>
+        </tr>
+    {% endfor %}
+   </table>
+  {% else %}
+    <div><p>No matches found.</p></div>
+  {% endif %}
+</div>

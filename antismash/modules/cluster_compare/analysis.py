@@ -14,6 +14,7 @@ from antismash.common.secmet import (
 )
 
 from .components import calculate_component_score
+from .data_structures import load_data, ReferenceArea
 from .ordering import calculate_order_score
 from .results import ClusterCompareResults
 
@@ -43,7 +44,7 @@ KIRRO_SCORES = {   #kirromycin/1070
 
 
 class ReferenceScorer:
-    def __init__(self, accession, data, hits_by_gene):
+    def __init__(self, accession, data, hits_by_gene, reference):
         self.accession = accession
         self.data = data
         self._raw_hits = hits_by_gene  # TODO remove
@@ -51,6 +52,8 @@ class ReferenceScorer:
         self._identity = -1.
         self._order = -1.
         self._components = -1.
+        self.reference = reference.regions[0] # TODO
+        self.final_score = -1.
 
     @property
     def identity(self) -> float:
@@ -89,8 +92,9 @@ def run(record: Record):
     # TODO handle custom databases
     with open(path.get_full_path(__file__, "data", "data.json")) as handle:
         ref_data = json.loads(handle.read())
+    processed = load_data(path.get_full_path(__file__, "data", "data.json"))
     _, by_reference = find_diamond_matches(record, path.get_full_path(__file__, "data", "proteins.dmnd"))
-    scores = {accession: ReferenceScorer(accession, ref_data[accession], hits) for accession, hits in by_reference.items()}
+    scores = {accession: ReferenceScorer(accession, ref_data[accession], hits, processed[accession]) for accession, hits in by_reference.items()}
 
     max_id = max(1, max(score.identity for score in scores.values()))
     ranked_scores = sorted(scores.items(), key=lambda x: calculate_final_score(x[1], max_id), reverse=True)
@@ -115,7 +119,9 @@ def run(record: Record):
 
 
 def calculate_final_score(score, max_id):
-    return ((score.identity / max_id) * score.order * score.components) ** (1/3)
+    result = ((score.identity / max_id) * score.order * score.components) ** (1/3)
+    score.final_score = result
+    return result
 
 
 def calculate_identity_score(hits):
@@ -151,6 +157,7 @@ def find_diamond_matches(record: Record, database: str):
 
         Returns:
     """  # TODO comment
+    # TODO gather by region in question, not record
     logging.info("Comparing regions to reference database")
     extra_args = [
         "--compress", "0",

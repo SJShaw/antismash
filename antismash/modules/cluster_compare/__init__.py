@@ -102,7 +102,7 @@ def regenerate_previous_results(previous: Dict[str, Any], record: Record,
             record: the Record that was used to generate the previous results
             options: an antismash.Config object
     """
-    return None  # TODO: remove, only to save time
+    import logging; logging.critical("discarding previous cluster-compare results")  # TODO
     return ClusterCompareResults.from_json(previous, record)
 
 
