@@ -6,18 +6,17 @@ EXTRA_SEGMENT_PENALTY = 0.75  # for multiple disjoint segments
 REVERSED_SEGMENT_PENALTY = 0.9  # for when the strand of a segment doesn't match
 
 
-def calculate_order_score(hits, ref_data):
+def calculate_order_score(area_features, hits, ref_data):
     if not hits:
         return 0.
     # build lists of reference features and features ordered by location
-    features = list(list(hits.values())[0].cds.region.cds_children)
     ref_names = list(ref_data["regions"][0]["cdses"])  # TODO handle protoclusters instead of regions
     reference_features = ref_data["regions"][0]["cdses"]
 #    reference_feature_order = {v: k for k, v in ref_data["regions"][0]["cds_mapping"]}
 
-    segments = find_segments(hits, features, reference_features, ref_data["cds_mapping"])
+    segments = find_segments(hits, area_features, reference_features, ref_data["cds_mapping"])
     assert segments, hits[0].reference_id
-    max_possible = min(len(features), len(reference_features))
+    max_possible = min(len(area_features), len(reference_features))
 
     return score_segments(segments, max_possible)
 

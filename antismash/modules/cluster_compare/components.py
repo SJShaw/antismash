@@ -27,26 +27,24 @@ class Components:
         return "\n".join(parts)
 
 
-def calculate_component_score(hits, ref_data):
+def calculate_component_score(area_features, hits, ref_data, loud=False):
     ref = gather_reference_components(ref_data["regions"][0])  # TODO should be handled further up
     # TODO don't repeat the query gather here, do it once per area
-    query = gather_query_components(list(hits.values())[0].cds.region)  # TODO use protoclusters/etc
-    assert query.nrps, query.nrps
-
-    return compare(ref, query)
+    query = gather_query_components(area_features)
+    return compare(ref, query, loud=loud)
 
 
 def compare(ref, query, loud=False):
     nrps = compare_modules(ref.nrps, query.nrps)
     if loud:
         print("nrps", nrps)
-    pks = compare_modules(ref.pks, query.pks)
+    pks = compare_modules(ref.pks, query.pks, loud)
     if loud:
         print("pks", pks)
     secmet = compare_combos(ref.secmet, query.secmet)
     if loud:
         print("secmet", secmet)
-    functions = compare_combos(ref.functions, query.functions, loud)  # TODO: skip if a minimal run? smcogs missing will cause scores to plummet
+    functions = compare_combos(ref.functions, query.functions)  # TODO: skip if a minimal run? smcogs missing will cause scores to plummet
     if loud:
         print("functions", functions)
     max_modules = sum(ref.pks.values()) + sum(ref.nrps.values())
@@ -60,9 +58,9 @@ def compare(ref, query, loud=False):
             modules = nrps
         elif nrps_weighting <= 0.001:
             modules = pks
-    assert 0 <= modules <= 1
-    assert 0 <= secmet <= 1
-    assert 0 <= functions <= 1
+    assert 0 <= modules <= 1, modules
+    assert 0 <= secmet <= 1, secmet
+    assert 0 <= functions <= 1, functions
     if max_modules:
         return (modules * secmet * functions) ** (1/3)#sum([modules, secmet, functions]) / 3
     else:
@@ -82,14 +80,14 @@ def compare_combos(ref, query, loud=False):
     ref_extra = ref_combos.difference(query_combos)
     query_extra = query_combos.difference(ref_combos)
 
-    max_possible = sum(ref.values())  # TODO directionality would be good to have
+    max_possible = min(sum(query.values()), sum(ref.values()))  # TODO directionality would be good to have
 
     assert max_possible
 
     found = 0
     for combo in ref_combos.intersection(query_combos):
         found += query[combo]
-    return found / max_possible
+    return min(found / max_possible, 1.)
 
 
 def compare_modules(ref, query, loud=False):
@@ -105,7 +103,7 @@ def compare_modules(ref, query, loud=False):
     ref_extra = ref_combos.difference(query_combos)
     query_extra = query_combos.difference(ref_combos)
 
-    max_possible = sum(ref.values())  # TODO directionality would be good to have
+    max_possible = max(sum(query.values()), sum(ref.values()))  # TODO directionality would be good to have
 
     assert max_possible
 
@@ -150,13 +148,13 @@ def gather_reference_components(ref_data):
     return Components(nrps, pks, secmet, functions)
 
 
-def gather_query_components(region):
+def gather_query_components(area_features):
     nrps = defaultdict(int)
     pks = defaultdict(int)
     secmet = defaultdict(int)
     functions = defaultdict(int)
 
-    for cds in region.cds_children:
+    for cds in area_features:
         if cds.gene_function != GeneFunction.OTHER:
             functions[str(cds.gene_function)] += 1
 
@@ -167,11 +165,11 @@ def gather_query_components(region):
         for module in cds.modules:
             if not module.is_complete():
                 continue
-            if module.module_type == "pks":
+            if str(module.module_type) == "pks":
                 target = pks
             elif str(module.module_type) == "nrps":  # TODO use actual moduletype enum
                 target = nrps
             else:
-                continue  # TODO possibly handle unknowns
+                assert False, module.module_type  # TODO possibly handle unknowns
             target[tuple(domain.domain.split("_")[0] if domain.domain.startswith("Condensation_") else domain.domain for domain in module.domains)] += 1
     return Components(nrps, pks, secmet, functions)

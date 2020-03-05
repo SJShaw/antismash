@@ -4,6 +4,7 @@
 from collections import defaultdict
 import json
 import logging
+import math
 from tempfile import NamedTemporaryFile
 from typing import Dict, List
 
@@ -44,7 +45,7 @@ KIRRO_SCORES = {   #kirromycin/1070
 
 
 class ReferenceScorer:
-    def __init__(self, accession, data, hits_by_gene, reference):
+    def __init__(self, accession, data, hits_by_gene, reference, area_features):
         self.accession = accession
         self.data = data
         self._raw_hits = hits_by_gene  # TODO remove
@@ -53,24 +54,42 @@ class ReferenceScorer:
         self._order = -1.
         self._components = -1.
         self.reference = reference.regions[0] # TODO
-        self.final_score = -1.
+        self._raw_identity = -1.
+        self._max_id = -1.
+        self._area_features = area_features
+
+    def calc_identity(self, max_id):
+        self._max_id = max_id
+        return self.identity
+
+    @property
+    def final_score(self) -> float:
+        return (self.identity * self.order * self.components) ** (1/3)
+
+    @property
+    def raw_identity(self) -> float:
+        if self._raw_identity < 0:
+            self._raw_identity = sum(hit.identity_score for hit in self.hits_by_gene.values())
+        return self._raw_identity
 
     @property
     def identity(self) -> float:
+        assert self._max_id > 0
         if self._identity < 0:
-            self._identity = calculate_identity_score(self.hits_by_gene)
+            self._identity = calculate_identity_score(self.raw_identity, self._max_id)
+        assert 0 <= self._identity <= 1, (self._identity, self.raw_identity, self._max_id)
         return self._identity
 
     @property
     def order(self) -> float:
         if self._order < 0:
-            self._order = calculate_order_score(self.hits_by_gene, self.data)
+            self._order = calculate_order_score(sorted(self._area_features), self.hits_by_gene, self.data)
         return self._order
 
     @property
     def components(self) -> float:
         if self._components < 0:
-            self._components = calculate_component_score(self.hits_by_gene, self.data)
+            self._components = calculate_component_score(self._area_features, self.hits_by_gene, self.data)
         return self._components
 
     def __repr__(self) -> str:
@@ -84,48 +103,76 @@ class ReferenceScorer:
             self.components,
         )
 
+    def table_string(self) -> str:
+        return "%.2f (id:%.2f, order:%.2f, components:%.2f)" % (
+            self.final_score,
+            self.identity,
+            self.order,
+            self.components,
+        )
+
 
 def run(record: Record):
     if not record.get_regions():
         return ClusterCompareResults(record.id, [])
 
+
     # TODO handle custom databases
     with open(path.get_full_path(__file__, "data", "data.json")) as handle:
         ref_data = json.loads(handle.read())
     processed = load_data(path.get_full_path(__file__, "data", "data.json"))
-    _, by_reference = find_diamond_matches(record, path.get_full_path(__file__, "data", "proteins.dmnd"))
-    scores = {accession: ReferenceScorer(accession, ref_data[accession], hits, processed[accession]) for accession, hits in by_reference.items()}
+    by_query, by_reference = find_diamond_matches(record, path.get_full_path(__file__, "data", "proteins.dmnd"))
 
-    max_id = max(1, max(score.identity for score in scores.values()))
-    ranked_scores = sorted(scores.items(), key=lambda x: calculate_final_score(x[1], max_id), reverse=True)
-    for acc, score in ranked_scores:
-        print("%s: %.3f ..%d.. id=%.2f, order=%.2f, comp=%.2f" % (
-            acc,
-            calculate_final_score(score, max_id),
-            len(score.hits_by_gene),
-            score.identity / max_id,
-            score.order,
-            score.components,
-        ), end="")
-        prev_scores = KIRRO_SCORES if "AM746336" in record.id else LEGACY_SCORES
-        if acc in prev_scores:
-            print(", legacy=", prev_scores[acc])
-        else:
-            print()
+    scores_by_region = {}
 
-    # TODO: set scoring/similarity to be by protocluster
+    for region in record.get_regions():
+        region_cds_names = {cds.get_name() for cds in region.cds_children}
+        hits_for_region = defaultdict(lambda: defaultdict(list))
+        for cluster, hits_by_cluster in by_reference.items():
+            for ref_id, hits in hits_by_cluster.items():
+                for hit in hits:
+                    if hit.cds.get_name() in region_cds_names:
+                        hits_for_region[cluster][ref_id].append(hit)
+        if not hits_for_region:
+            continue
+        scores = {accession: ReferenceScorer(accession, ref_data[accession], hits, processed[accession], region.cds_children) for accession, hits in hits_for_region.items()}
 
-    return ClusterCompareResults(record.id, ranked_scores)
+        max_id = max(1, max(score.raw_identity for score in scores.values()))
+        for score in scores.values():
+            assert score.raw_identity <= max_id
+            score.calc_identity(max_id)
+        ranked_scores = sorted(scores.items(), key=lambda x: x[1].final_score, reverse=True)
+        print(region)
+        for acc, score in ranked_scores:
+            print("%s: %.3f ..%d.. id=%.2f, order=%.2f, comp=%.2f" % (
+                acc,
+                score.final_score,
+                len(score.hits_by_gene),
+                score.identity,
+                score.order,
+                score.components,
+            ), end="")
+            prev_scores = {}#KIRRO_SCORES if "AM746336" in record.id else LEGACY_SCORES
+            if acc in prev_scores:
+                print(", legacy=", prev_scores[acc])
+            else:
+                print()
+
+        # TODO: set scoring/similarity to be by protocluster
+        scores_by_region[region.get_region_number()] = ranked_scores
+
+    return ClusterCompareResults(record.id, scores_by_region)
 
 
-def calculate_final_score(score, max_id):
-    result = ((score.identity / max_id) * score.order * score.components) ** (1/3)
-    score.final_score = result
+def calculate_identity_score(score, max_score) -> float:
+    normalised = score / max_score
+    # avoid division by 0
+    if normalised > 1. - 1e-8:
+        return normalised
+    # logit function, shifted from x range of (-6, 6) to (0, 1), though tiny values can result in small negatives
+    result = max(0, math.log(normalised/(1-normalised)) / 12 + 0.5)
+    assert 0 <= result <= 1
     return result
-
-
-def calculate_identity_score(hits):
-    return sum(hit.identity_score for hit in hits.values())
 
 
 def trim_to_best_hit(hits_by_reference_gene):

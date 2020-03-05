@@ -15,9 +15,9 @@ class ClusterCompareResults(ModuleResults):
     """ The results of cluster comparison """
     _schema_version = 1
 
-    def __init__(self, record_id, scores) -> None:
+    def __init__(self, record_id, scores_by_region) -> None:
         super().__init__(record_id)
-        self.scores = scores
+        self.scores_by_region = scores_by_region
 
     def to_json(self) -> Dict[str, Any]:
         return {}  # TODO
