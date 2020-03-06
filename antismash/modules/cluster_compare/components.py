@@ -62,9 +62,9 @@ def compare(ref, query, loud=False):
     assert 0 <= secmet <= 1, secmet
     assert 0 <= functions <= 1, functions
     if max_modules:
-        return (modules * secmet * functions) ** (1/3)#sum([modules, secmet, functions]) / 3
+        return sum([modules, secmet, functions]) / 3
     else:
-        return (secmet * functions) ** .5
+        return (secmet + functions) / 2
 
 
 def compare_combos(ref, query, loud=False):
