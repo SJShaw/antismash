@@ -71,6 +71,7 @@ def generate_javascript_data(record: Record, region: Region, results: ClusterCom
             gene["start"] = location.start
             gene["end"] = location.end
             gene["strand"] = location.strand
+            gene["linked"] = {}
         ref_entry = {  # TODO: merge these for different protoclusters
             "links": [],
             "start": ref.start,
@@ -80,6 +81,7 @@ def generate_javascript_data(record: Record, region: Region, results: ClusterCom
 
         mismatching_strands = 0
         for ref_cds_id, hit in score.hits_by_gene.items():
+            assert locations.locations_overlap(hit.cds.location, region.location)
             query_cds = hit.cds
             query_point = query_cds.location.start + (query_cds.location.end - query_cds.location.start) // 2
             ref_cds = score.reference.cdses[score.reference.cds_mapping[ref_cds_id]]
@@ -87,7 +89,7 @@ def generate_javascript_data(record: Record, region: Region, results: ClusterCom
             subject_point = ref_location.start + (ref_location.end - ref_location.start) // 2
             if query_cds.location.strand != ref_location.strand:
                 mismatching_strands += 1
-            genes[ref_cds.name]["linked"] = True
+            genes[ref_cds.name]["linked"][region.get_region_number()] = query_cds.get_name()
             ref_entry["links"].append({
                 "query": query_cds.get_name(),
                 "subject": ref_cds.name,
