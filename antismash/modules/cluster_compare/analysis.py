@@ -30,7 +30,7 @@ LEGACY_SCORES = {  # 1192
     "BGC0001536.1": (11, 13776.0/35747, 8),
 }
 
-KIRRO_SCORES = {   #kirromycin/1070
+KIRRO_SCORES = {   # kirromycin/1070
     "BGC0001070.1": (132, 72791.0/72791.0, 1),
     "BGC0001807.1": (14, 6854.0/72791.0, 2),
     "BGC0001183.1": (10, 5345.0/72791.0, 3),
@@ -53,7 +53,7 @@ class ReferenceScorer:
         self._identity = -1.
         self._order = -1.
         self._components = -1.
-        self.reference = reference.regions[0] # TODO
+        self.reference = reference.regions[0]  # TODO
         self._raw_identity = -1.
         self._max_id = -1.
         self._area_features = area_features
@@ -112,10 +112,20 @@ class ReferenceScorer:
         )
 
 
+def filter_by_area(area, hits_by_reference):
+    region_cds_names = {cds.get_name() for cds in area.cds_children}
+    hits_for_area = defaultdict(lambda: defaultdict(list))
+    for cluster, hits_by_cluster in hits_by_reference.items():
+        for ref_id, hits in hits_by_cluster.items():
+            for hit in hits:
+                if hit.cds.get_name() in region_cds_names:
+                    hits_for_area[cluster][ref_id].append(hit)
+    return hits_for_area
+
+
 def run(record: Record):
     if not record.get_regions():
-        return ClusterCompareResults(record.id, [])
-
+        return ClusterCompareResults(record.id, [], [], [])
 
     # TODO handle custom databases
     with open(path.get_full_path(__file__, "data", "data.json")) as handle:
@@ -124,44 +134,35 @@ def run(record: Record):
     by_query, by_reference = find_diamond_matches(record, path.get_full_path(__file__, "data", "proteins.dmnd"))
 
     scores_by_region = {}
+    scores_by_protocluster = {}
+    hits_by_region = {}
 
     for region in record.get_regions():
-        region_cds_names = {cds.get_name() for cds in region.cds_children}
-        hits_for_region = defaultdict(lambda: defaultdict(list))
-        for cluster, hits_by_cluster in by_reference.items():
-            for ref_id, hits in hits_by_cluster.items():
-                for hit in hits:
-                    if hit.cds.get_name() in region_cds_names:
-                        hits_for_region[cluster][ref_id].append(hit)
+        hits_for_region = filter_by_area(region, by_reference)
         if not hits_for_region:
             continue
-        scores = {accession: ReferenceScorer(accession, ref_data[accession], hits, processed[accession], region.cds_children) for accession, hits in hits_for_region.items()}
+        scores_within_region = defaultdict(list)
+        for protocluster in region.get_unique_protoclusters():
+            hits_for_protocluster = filter_by_area(protocluster, hits_for_region)
+            scores = {accession: ReferenceScorer(accession, ref_data[accession], hits, processed[accession], protocluster.cds_children) for accession, hits in hits_for_protocluster.items()}
+            if not scores:
+                continue
+            max_id = max(1, max(score.raw_identity for score in scores.values()))
+            for score in scores.values():
+                assert score.raw_identity <= max_id
+                score.calc_identity(max_id)
+            scores_by_protocluster[protocluster.get_protocluster_number()] = scores
+            scores_within_region[region.get_region_number()].extend(scores.items())
 
-        max_id = max(1, max(score.raw_identity for score in scores.values()))
-        for score in scores.values():
-            assert score.raw_identity <= max_id
-            score.calc_identity(max_id)
-        ranked_scores = sorted(scores.items(), key=lambda x: x[1].final_score, reverse=True)
-        print(region)
-        for acc, score in ranked_scores:
-            print("%s: %.3f ..%d.. id=%.2f, order=%.2f, comp=%.2f" % (
-                acc,
-                score.final_score,
-                len(score.hits_by_gene),
-                score.identity,
-                score.order,
-                score.components,
-            ), end="")
-            prev_scores = {}#KIRRO_SCORES if "AM746336" in record.id else LEGACY_SCORES
-            if acc in prev_scores:
-                print(", legacy=", prev_scores[acc])
-            else:
-                print()
+        # rank the results for a region differently
+        region_ranking = defaultdict(float)
+        for ref_accession, score in scores_within_region[region.get_region_number()]:
+            region_ranking[ref_accession] += score.final_score
+        ranking = sorted(region_ranking.items(), key=lambda x: x[1], reverse=True)
+        scores_by_region[region.get_region_number()] = [(acc, (score, processed[acc].regions[0])) for acc, score in ranking]  # TODO handle multiple regions in a ref record
+        hits_by_region[region.get_region_number()] = hits_for_region
 
-        # TODO: set scoring/similarity to be by protocluster
-        scores_by_region[region.get_region_number()] = ranked_scores
-
-    return ClusterCompareResults(record.id, scores_by_region)
+    return ClusterCompareResults(record.id, scores_by_region, scores_by_protocluster, hits_by_region)
 
 
 def calculate_identity_score(score, max_score) -> float:
@@ -169,9 +170,11 @@ def calculate_identity_score(score, max_score) -> float:
     # avoid division by 0
     if normalised > 1. - 1e-8:
         return normalised
-    # logit function, shifted from x range of (-6, 6) to (0, 1), though tiny values can result in small negatives
-    result = max(0, math.log(normalised/(1-normalised)) / 12 + 0.5)
-    assert 0 <= result <= 1
+    # logit function, shifted from x range of (-6, 6) to (0, 1)
+    # tiny values can result in small negatives
+    # very high normalised values can result in just over 1 (e.g. .997 -> 1.003)
+    result = min(1, max(0, math.log(normalised/(1-normalised)) / 12 + 0.5))
+    assert 0 <= result <= 1, normalised
     return result
 
 

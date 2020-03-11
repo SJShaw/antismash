@@ -18,10 +18,6 @@ def will_handle(_products: List[str]) -> bool:
         product """
     return True
 
-def scores_within_limit(scores):
-    return [score for score in scores[:10] if score[1].hits_by_gene]
-
-
 def generate_html(region_layer: RegionLayer, results: ClusterCompareResults,
                   record_layer: RecordLayer, options_layer: OptionsLayer
                   ) -> HTMLSections:
@@ -37,8 +33,8 @@ def generate_html(region_layer: RegionLayer, results: ClusterCompareResults,
     # TODO  variants
     tooltip = base_tooltip % "clusters from the MiBIG database"
     tooltip += "<br>Click on an accession to open that entry in the MiBIG database."
-    scores = scores_within_limit(results.scores_by_region.get(region_layer.get_region_number(), []))
-    div = generate_div(region_layer, record_layer, options_layer, "mibig", tooltip, scores)
+    scores = results.scores_by_region.get(region_layer.get_region_number(), [])[:10]
+    div = generate_div(region_layer, record_layer, options_layer, "mibig", tooltip, scores, results.scores_by_protocluster)
     html.add_detail_section("known-cluster-compare", div, "known-cluster-compare")
 
     return html
@@ -46,12 +42,12 @@ def generate_html(region_layer: RegionLayer, results: ClusterCompareResults,
 
 def generate_div(region_layer: RegionLayer, record_layer: RecordLayer,
                  options_layer: OptionsLayer, search_type: str,
-                 tooltip: str, results: str) -> Markup:  # TODO fix typing
+                 tooltip: str, results: str, proto_results) -> Markup:  # TODO fix typing
     """ Generates the specific HTML section of the body for a given variant of
         clusterblast
     """
     template = FileTemplate(path.get_full_path(__file__, "templates", "%s.html" % search_type))
-    return template.render(record=record_layer, region=region_layer, options=options_layer, tooltip=tooltip, results=results)
+    return template.render(record=record_layer, region=region_layer, options=options_layer, tooltip=tooltip, results=results, proto_results=proto_results)
 
 
 def generate_javascript_data(record: Record, region: Region, results: ClusterCompareResults) -> Dict[str, Any]:
@@ -59,11 +55,11 @@ def generate_javascript_data(record: Record, region: Region, results: ClusterCom
         "reference_clusters": {},
     }
     # TODO variants
-    known = scores_within_limit(results.scores_by_region.get(region.get_region_number(), []))
+    known = results.scores_by_region.get(region.get_region_number(), [])[:10]
     if not known:
         return {}
-    for accession, score in known:
-        ref = score.reference
+    for accession, totalscore_ref in known:
+        totalscore, ref = totalscore_ref
         genes = ref.get_cds_json()
         for name, gene in genes.items():
             gene["locus_tag"] = name
@@ -80,11 +76,12 @@ def generate_javascript_data(record: Record, region: Region, results: ClusterCom
         data["reference_clusters"][accession] = ref_entry
 
         mismatching_strands = 0
-        for ref_cds_id, hit in score.hits_by_gene.items():
+        for ref_cds_id, hit in results.hits_by_region.get(region.get_region_number(), {}).get(accession, {}).items():
+            hit = hit[0]
             assert locations.locations_overlap(hit.cds.location, region.location)
             query_cds = hit.cds
             query_point = query_cds.location.start + (query_cds.location.end - query_cds.location.start) // 2
-            ref_cds = score.reference.cdses[score.reference.cds_mapping[ref_cds_id]]
+            ref_cds = ref.cdses[ref.cds_mapping[ref_cds_id]]
             ref_location = locations.location_from_string(ref_cds.location)
             subject_point = ref_location.start + (ref_location.end - ref_location.start) // 2
             if query_cds.location.strand != ref_location.strand:
