@@ -48,7 +48,6 @@ class ReferenceScorer:
     def __init__(self, accession, data, hits_by_gene, reference, area_features):
         self.accession = accession
         self.data = data
-        self._raw_hits = hits_by_gene  # TODO remove
         self.hits_by_gene = trim_to_best_hit(hits_by_gene)
         self._identity = -1.
         self._order = -1.
@@ -139,6 +138,8 @@ def run(record: Record):
 
     for region in record.get_regions():
         hits_for_region = filter_by_area(region, by_reference)
+        for ref, ref_hits in hits_for_region.items():
+            hits_for_region[ref] = trim_to_best_hit(ref_hits)
         if not hits_for_region:
             continue
         scores_within_region = defaultdict(list)
@@ -193,6 +194,7 @@ def trim_to_best_hit(hits_by_reference_gene):
         if hit.cds in features or ref in mapping:
             continue
         mapping[ref] = hit
+        assert hit.cds not in features
         features.add(hit.cds)
     assert 1 <= len(mapping) <= len(hits_by_reference_gene)
     return mapping
