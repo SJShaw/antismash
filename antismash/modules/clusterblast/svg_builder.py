@@ -203,7 +203,9 @@ class Gene:
         """ Constructs a Gene instance from a Protein instance """
         strand = protein.strand
         name = protein.get_id()
-        start, end = [int(i) for i in protein.location.split("-")]
+        location = secmet.locations.location_from_string(protein.location)
+        start = location.start
+        end = location.end
         return Gene(start, end, strand, name, protein=protein)
 
     def reverse(self) -> None:
@@ -286,11 +288,11 @@ class Gene:
 class Cluster:
     """ For constructing all SVG components required to represent a cluster
     """
-    def __init__(self, region_number: int, ref_cluster_number: str, accession: str,
+    def __init__(self, region_number: int, reference_label: str, accession: str,
                  description: str, features: Union[List[Protein], List[secmet.CDSFeature]], rank: int,
                  cluster_type: str, hits: int = 0, strand: int = 1, prefix: str = "general") -> None:
         self.region_number = region_number
-        self.ref_cluster_number = int(ref_cluster_number.lstrip('c'))
+        self.reference_label = reference_label
         self.accession = accession
         self.description = description.replace("_", " ")
         self.cluster_type = cluster_type
@@ -332,7 +334,7 @@ class Cluster:
     def full_description(self) -> str:
         """ Returns a string formatted with accession, cluster number and
             similarity score """
-        desc = "%s_c%d: %s" % (self.accession, self.ref_cluster_number, self.description)
+        desc = "%s_c%d: %s" % (self.accession, self.reference_label, self.description)
         if len(desc) > 80:
             desc = desc[:77] + "..."
         return "%s (%s), %s" % (desc, self.similarity_string, self.cluster_type)
@@ -354,12 +356,12 @@ class Cluster:
         if self.prefix == "knownclusterblast":
             desc = "%80s (%s), %s" % (self.description, self.similarity_string, self.cluster_type)
             acc = Text('<a xlink:href="https://mibig.secondarymetabolites.org/go/'
-                       + self.accession + '/%s" target="_blank">' % self.ref_cluster_number
+                       + self.accession + '/1" target="_blank">'
                        + self.accession + '</a>: '
                        + desc, 5, 20 + v_offset)
         elif self.prefix == "general":
             acc = Text('<a xlink:href="https://antismash-db.secondarymetabolites.org/go/'
-                       + self.accession + '/%s" target="_blank">' % self.ref_cluster_number
+                       + self.accession + '/%s" target="_blank">' % self.reference_label
                        + self.full_description.replace(":", "</a>:", 1), 5, 20 + v_offset)
         # Don't do any linking for subclusterblast
 
@@ -411,10 +413,10 @@ class Cluster:
                                reference_proteins: Dict[str, Protein], rank: int, num_hits: int,
                                strand: int, prefix: str) -> "Cluster":
         """ Constructs a Cluster instance from a ReferenceCluster instance """
-        proteins = [reference_proteins[protein] for protein in cluster.tags]
-        svg_cluster = Cluster(region_number, str(cluster.cluster_label),
-                              cluster.accession, cluster.description, proteins,
-                              rank, cluster.cluster_type, num_hits, strand, prefix)
+        proteins = list(cluster.proteins.values())
+        svg_cluster = Cluster(region_number, cluster.get_area_label(),
+                              cluster.accession, "temp desc", proteins,
+                              rank, cluster.products, num_hits, strand, prefix)
         for query, subject in score.scored_pairings:
             for gene in svg_cluster.genes:
                 if gene.name in [subject.name, query.id]:

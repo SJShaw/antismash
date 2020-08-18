@@ -4,7 +4,30 @@
 """ A collection of data structures shared by the clusterblast variants """
 
 from collections import OrderedDict
-from typing import Dict, List, Tuple, Union  # in comment hints: pylint: disable=unused-import
+from typing import Any, Dict, List, Tuple, Type, Union
+
+from antismash.common.secmet.locations import location_from_string
+
+
+class ReferenceProtocluster:
+    __slots__ = (
+        "start",
+        "end",
+        "product",
+    )
+
+    def __init__(self, product: str, start: int, end: int) -> None:
+        if not product:
+            raise ValueError("missing product in reference protocluster")
+        if not 0 < start < end:
+            raise ValueError("invalid positions for reference protocluster: %s-%s" % (start, end))
+        self.product = product
+        self.start = start
+        self.end = end
+
+    @classmethod
+    def from_json(cls: Type["ReferenceProtocluster"], data: Dict[str, Any]) -> "ReferenceProtocluster":
+        return cls(data["product"], int(data["start"]), int(data["end"]))
 
 
 class ReferenceCluster:
@@ -28,6 +51,47 @@ class ReferenceCluster:
         """ Returns the name of the cluster, including cluster number """
         return "%s_%s" % (self.accession, self.cluster_label)
 
+
+class ReferenceRegion:
+    __slots__ = (
+        'accession',
+        'start',
+        'end',
+        'products',
+        'contig_edge',
+        'loci',
+        'protoclusters',
+        'proteins',
+    )
+
+    def __init__(self, accession: str, start: int, end: int, products: str,
+                 contig_edge: bool, protoclusters: List[ReferenceProtocluster],
+                 proteins: Dict[str, "Protein"]) -> "ReferenceRegion":
+        self.accession = accession
+        self.start = start
+        self.end = end
+        self.products = products
+        self.contig_edge = contig_edge
+        self.protoclusters = protoclusters
+        self.proteins = proteins
+
+    def get_name(self) -> str:
+        """ Returns the name of the cluster, including cluster number """
+        return "%s_%d-%d" % (self.accession, self.start, self.end)
+
+    @classmethod
+    def from_json(cls: Type["ReferenceRegion"], data: Dict[str, Any]) -> "ReferenceRegion":
+        protoclusters = [ReferenceProtocluster.from_json(proto) for proto in data["protoclusters"]]
+        proteins = {prot.name: prot for prot in map(Protein.from_json, data["loci"])}
+        return ReferenceRegion(data["id"], int(data["start"]), int(data["end"]), data["cluster_type"],
+                                bool(data["truncated"]), protoclusters, proteins)
+
+    def get_area_label(self) -> str:
+        return "%s-%s" % (self.start, self.end)
+
+    @property
+    def tags(self):
+        return list(self.proteins)
 
 class Protein:
     """ Holds details of a protein. Members cannot be added dynamically.
@@ -61,11 +125,17 @@ class Protein:
         return "{}\t{}\t{}\t{}\t{}\n".format(tag, self.name, locations,
                                              self.strand, self.annotations)
 
+    @classmethod
+    def from_json(cls: Type["Protein"], data: Dict[str, Any]) -> "Protein":
+        location = location_from_string(data["location"])
+        return cls(data["id"], data.get("locus_tag", "no_locus_tag"), data["location"],
+                   location.strand, data["annotation"])
 
 class Subject:
     """ Holds details of a subject as reported by BLAST """
     def __init__(self, name: str, genecluster: str, start: int, end: int, strand: str, annotation: str,
-                 perc_ident: int, blastscore: int, perc_coverage: float, evalue: float, locus_tag: str) -> None:
+                 perc_ident: int, blastscore: int, perc_coverage: float, evalue: float, locus_tag: str,
+                 record: str) -> None:
         self.name = name
         self.genecluster = genecluster
         self.start = int(start)
@@ -77,6 +147,7 @@ class Subject:
         self.perc_coverage = float(perc_coverage)
         self.evalue = float(evalue)
         self.locus_tag = str(locus_tag)
+        self.record = record
 
     def __len__(self) -> int:
         return abs(int(self.start) - int(self.end))
@@ -108,19 +179,21 @@ class Query:
         self.id = parts[4]  # accession
         self.entry = entry
         self.subjects = OrderedDict()  # type: Dict[str, Subject]
-        self.cluster_name_to_subjects = {}  # type: Dict[str, List[Subject]]
+        self.cluster_name_to_subjects = {}  # type: Dict[str, Dict[str, List[Subject]]]
         self.index = index
 
     def add_subject(self, subject: Subject) -> None:
         """ Adds a Subject to the Query linkings """
         self.subjects[subject.name] = subject
-        if subject.genecluster not in self.cluster_name_to_subjects:
-            self.cluster_name_to_subjects[subject.genecluster] = []
-        self.cluster_name_to_subjects[subject.genecluster].append(subject)
+        if subject.record not in self.cluster_name_to_subjects:
+            self.cluster_name_to_subjects[subject.record] = {}
+        if subject.genecluster not in self.cluster_name_to_subjects[subject.record]:
+            self.cluster_name_to_subjects[subject.record][subject.genecluster] = []
+        self.cluster_name_to_subjects[subject.record][subject.genecluster].append(subject)
 
-    def get_subjects_by_cluster(self, cluster_name: str) -> List[Subject]:
+    def get_subjects_by_cluster(self, record: str, area: str) -> List[Subject]:
         """ Returns a list of Subjects that shared the cluster name """
-        return self.cluster_name_to_subjects.get(cluster_name, [])
+        return self.cluster_name_to_subjects.get(record, {}).get(area, [])
 
 
 class Score:

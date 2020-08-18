@@ -17,7 +17,7 @@ from .core import (
     check_clusterblast_files,
     get_core_gene_ids,
     load_clusterblast_database,
-    parse_all_clusters,
+    legacy_parse_all_clusters as parse_all_clusters,
     run_diamond_on_all_regions,
     score_clusterblast_output,
     write_raw_clusterblastoutput,

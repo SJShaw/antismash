@@ -13,7 +13,7 @@ from antismash.common.secmet import Record
 
 from .core import (
     get_core_gene_ids,
-    parse_all_clusters,
+    parse_results,
     run_diamond_on_all_regions,
     score_clusterblast_output,
     write_raw_clusterblastoutput,
@@ -43,9 +43,11 @@ def perform_clusterblast(options: ConfigType, record: Record,
 
     write_raw_clusterblastoutput(options.output_dir, blastoutput)
 
-    clusters_by_number, _ = parse_all_clusters(blastoutput, record,
-                                               min_seq_coverage=10,
-                                               min_perc_identity=30)
+    clusters_by_number, _ = parse_results(blastoutput, record,
+                                          db_clusters,
+                                          db_proteins,
+                                          min_seq_coverage=10,
+                                          min_perc_identity=30)
     results = GeneralResults(record.id)
 
     core_gene_accessions = get_core_gene_ids(record)

@@ -4,6 +4,7 @@
 """ Shared functions across variants of clusterblast """
 
 from collections import defaultdict, OrderedDict
+import json
 import logging
 import os
 import struct
@@ -15,7 +16,7 @@ from helperlibs.wrappers.io import TemporaryDirectory
 from antismash.common import path, subprocessing, fasta, secmet
 from antismash.config import get_config
 
-from .data_structures import Subject, Query, Protein, ReferenceCluster, Score
+from .data_structures import Subject, Query, Protein, ReferenceCluster, ReferenceRegion, Score
 
 _SHIPPED_DATA_DIR = path.get_full_path(__file__, "data")
 
@@ -103,6 +104,41 @@ def make_blastdb(inputfile: str, db_prefix: str) -> subprocessing.RunResult:
     return result
 
 
+def load_reference_json(searchtype: str) -> Dict[str, ReferenceCluster]:
+    """ Load gene cluster database
+
+    Arguments:
+        searchtype: determines which database to use, allowable values:
+                        clusterblast, subclusterblast, knownclusterblast
+
+    Returns:
+        a dictionary mapping reference cluster name to ReferenceCluster
+        instance
+    """
+    options = get_config()
+
+    if searchtype == "clusterblast":
+        logging.info("ClusterBlast: Loading gene cluster database into memory...")
+        data_dir = os.path.join(options.database_dir, 'clusterblast')
+    elif searchtype == "subclusterblast":
+        raise NotImplementedError("subclusterblast not yet converted")
+        logging.info("SubClusterBlast: Loading gene cluster database into memory...")
+        data_dir = os.path.join(_SHIPPED_DATA_DIR, "sub")
+    elif searchtype == "knownclusterblast":
+        raise NotImplementedError("knownclusterblast not yet converted")
+        logging.info("KnownClusterBlast: Loading gene cluster database into memory...")
+        data_dir = os.path.join(_SHIPPED_DATA_DIR, "known")
+
+    reference_file = os.path.join(data_dir, "clusters.json")
+    with open(reference_file, "r") as handle:
+        raw = json.load(handle)
+    regions = map(ReferenceRegion.from_json, raw)
+    regions_by_record = defaultdict(dict)  # type: Dict[str, Dict[str, ReferenceRegion]]
+    for region in regions:
+        regions_by_record[region.accession]["%s-%s" % (region.start, region.end)] = region
+    return dict(regions_by_record)  # remove defaultdict behaviour
+
+
 def load_reference_clusters(searchtype: str) -> Dict[str, ReferenceCluster]:
     """ Load gene cluster database
 
@@ -119,6 +155,7 @@ def load_reference_clusters(searchtype: str) -> Dict[str, ReferenceCluster]:
     if searchtype == "clusterblast":
         logging.info("ClusterBlast: Loading gene cluster database into memory...")
         data_dir = os.path.join(options.database_dir, 'clusterblast')
+        return load_reference_json(searchtype)
     elif searchtype == "subclusterblast":
         logging.info("SubClusterBlast: Loading gene cluster database into memory...")
         data_dir = os.path.join(_SHIPPED_DATA_DIR, "sub")
@@ -199,7 +236,14 @@ def load_clusterblast_database(searchtype: str = "clusterblast"
                 a dictionary mapping protein name to Protein instance
     """
     clusters = load_reference_clusters(searchtype)
-    proteins = load_reference_proteins(searchtype)
+    if searchtype != "clusterblast":
+        proteins = load_reference_proteins(searchtype)
+    else:
+        proteins = {}
+        for accession, areas in clusters.items():
+            for area, region in areas.items():
+                for protein_name, protein in region.proteins.items():
+                    proteins["%s|%s" % (accession, protein_name)] = protein
 
     return clusters, proteins
 
@@ -273,7 +317,7 @@ def remove_duplicate_hits(blast_lines: List[List[str]]) -> List[List[str]]:
     return deduplicated
 
 
-def parse_subject(line_parts: List[str], seqlengths: Dict[str, int],
+def legacy_parse_subject(line_parts: List[str], seqlengths: Dict[str, int],
                   record: secmet.Record) -> Subject:
     """ Parses a blast-formatted subject line and converts to Subject instance
 
@@ -312,10 +356,124 @@ def parse_subject(line_parts: List[str], seqlengths: Dict[str, int],
         seqlength = len(record.get_cds_by_name(cds_name).translation)
         perc_coverage = (float(line_parts[3]) / seqlength) * 100
     return Subject(subject, genecluster, int(start), int(end), strand, annotation,
-                   perc_ident, blastscore, perc_coverage, evalue, locustag)
+                   perc_ident, blastscore, perc_coverage, evalue, locustag, "")
 
 
-def parse_all_clusters(blasttext: str, record: secmet.Record, min_seq_coverage: float, min_perc_identity: float
+def parse_subject(line_parts: List[str], seqlengths: Dict[str, int],
+                  record: secmet.Record, reference_regions) -> Subject:
+    """ Parses a blast-formatted subject line and converts to Subject instance
+
+        Arguments:
+            line_parts: a list of line parts, the original line split on line_parts
+            seqlengths: a dictionary of CDS accession to CDS length for calculating
+                        percentage of hit coverage
+            names: a set of CDS names to avoid collisions
+            record: the Record to operate on
+
+        Returns:
+            a Subject instance
+    """
+    if len(line_parts) < 12:
+        logging.error("Malformed blast pairing: %s", "\t".join(line_parts))
+    query = line_parts[0]
+    subject_parts = line_parts[1].split("|")
+    assert len(subject_parts) == 3, "unexpected reference hit: %s" % line_parts[1]
+    record, area, name = subject_parts
+    protein = reference_regions[record][area].proteins[name]
+    location = secmet.locations.location_from_string(protein.location)
+    subject = protein.name
+    locustag = protein.locus_tag
+    start = location.start
+    end = location.end
+    strand = location.strand
+    annotation = protein.annotations
+    perc_ident = int(float(line_parts[2]) + 0.5)
+    evalue = float(line_parts[10])
+    blastscore = int(float(line_parts[11]) + 0.5)
+    cds_name = query.split("|")[4]
+    if cds_name in seqlengths:
+        perc_coverage = (float(line_parts[3]) / seqlengths[cds_name]) * 100
+    else:
+        seqlength = len(record.get_cds_by_name(cds_name).translation)
+        perc_coverage = (float(line_parts[3]) / seqlength) * 100
+    return Subject(subject, area, int(start), int(end), strand, annotation,
+                   perc_ident, blastscore, perc_coverage, evalue, locustag, record)
+
+
+def parse_results(blast_output: str, record: secmet.Record,
+                  reference_regions, reference_proteins,
+                  min_seq_coverage: float, min_perc_identity: float,
+                       ) -> Tuple[Dict[int, Dict[str, List[Query]]],
+                                  Dict[int, Dict[str, Query]]]:
+    """ Parses blast results, groups into results by cluster number
+
+        Arguments:
+            blasttext: the output from diamond in blast format
+            record: used to get all gene ids in the cluster, and used as a
+                    backup to fetch sequence length if missing from seqlengths
+            min_seq_coverage: the exclusive lower bound of sequence coverage for a match
+            min_perc_identity: the exclusive lower bound of identity similarity for a match
+
+        Returns: a tuple of
+                    a dictionary mapping record cluster number to a
+                        dictionary of reference clusters names to a
+                            list of query hits
+                    a dictionary mapping record cluster number to a
+                        dictionary of query name to Query instance
+    """
+    cds_lengths = get_cds_lengths(record)
+    queries = OrderedDict()  # type: Dict[str, Query]
+    regions = OrderedDict()  # type: Dict[str, List[Query]]
+
+    blast_lines = remove_duplicate_hits([line.split("\t") for line in blast_output.rstrip().splitlines()])
+
+    current_query = None
+    queries_by_region_number = {}  # type: Dict[int, Dict[str, Query]]
+    clusters_by_query_region_number = {}  # type: Dict[int, Dict[str, List[Query]]]
+
+    for line in blast_lines:
+        query = line[0]
+
+        subject = parse_subject(line, cds_lengths, record, reference_regions)
+
+        # only process the pairing if limits met
+        if subject.perc_ident <= min_perc_identity \
+                or subject.perc_coverage <= min_seq_coverage:
+            continue
+
+        new_query = query not in queries
+
+        if new_query:
+            current_query = Query(query, len(queries))
+            cluster_number = current_query.cluster_number
+            # is it a new cluster number? if so, reset collections
+            if cluster_number not in queries_by_region_number:
+                queries = OrderedDict()
+                clusters = OrderedDict()
+                # reset query index, since we started a new collection
+                current_query.index = 0
+                # link them
+                queries_by_region_number[cluster_number] = queries
+                clusters_by_query_region_number[cluster_number] = clusters
+            # finally, add the query to the current tracker
+            queries[query] = current_query
+
+        assert current_query is not None
+
+        if subject.record not in clusters:
+            clusters[subject.record] = {}
+        if subject.genecluster not in clusters[subject.record]:
+            clusters[subject.record][subject.genecluster] = []
+        clusters[subject.record][subject.genecluster].append(current_query)
+
+        # link the subject to the query
+        current_query.add_subject(subject)
+
+    return clusters_by_query_region_number, queries_by_region_number
+
+
+def legacy_parse_all_clusters(blasttext: str, record: secmet.Record, min_seq_coverage: float,
+                              min_perc_identity: float
                        ) -> Tuple[Dict[int, Dict[str, List[Query]]],
                                   Dict[int, Dict[str, Query]]]:
     """ Parses blast results, groups into results by cluster number
@@ -344,7 +502,7 @@ def parse_all_clusters(blasttext: str, record: secmet.Record, min_seq_coverage: 
 
     for tabs in blastlines:
         query = tabs[0]
-        subject = parse_subject(tabs, seqlengths, record)
+        subject = legacy_parse_subject(tabs, seqlengths, record)
 
         # only process the pairing if limits met
         if subject.perc_ident <= min_perc_identity \
@@ -407,7 +565,7 @@ def blastparse(blasttext: str, record: secmet.Record, min_seq_coverage: float = 
 
     for tabs in blastlines:
         query = tabs[0]
-        subject = parse_subject(tabs, seqlengths, record)
+        subject = legacy_parse_subject(tabs, seqlengths, record)
 
         # only process the pairing if limits met
         if subject.perc_ident <= min_perc_identity \
@@ -533,7 +691,7 @@ def write_raw_clusterblastoutput(output_dir: str, blast_output: str, prefix: str
 
 
 def parse_clusterblast_dict(queries: List[Query], clusters: Dict[str, ReferenceCluster],
-                            cluster_label: str, allcoregenes: Set[str]
+                            record: str, area: str, allcoregenes: Set[str]
                             ) -> Tuple[Score, List[Tuple[int, int]], List[bool]]:
     """ Generates a score for a cluster, based on the queries and clusters,
         along with the pairings of subjects and queries used to determine that
@@ -557,11 +715,12 @@ def parse_clusterblast_dict(queries: List[Query], clusters: Dict[str, ReferenceC
     result = Score()
     hitpositions = []  # type: List[Tuple[int, int]]
     hitposcorelist = []
-    cluster_locii = clusters[cluster_label].tags
+    cluster_locii = clusters[record][area].tags
     for query in queries:
         querynrhits = 0
-        for subject in query.get_subjects_by_cluster(cluster_label):
-            assert cluster_label == subject.genecluster
+        print(query, query.cluster_name_to_subjects)
+        for subject in query.get_subjects_by_cluster(record, area):
+            assert record == subject.record and area == subject.genecluster
             if subject.name not in cluster_locii:
                 continue
             index_pair = (query.index, cluster_locii.index(subject.name))
@@ -636,7 +795,7 @@ def calculate_synteny_score(hitgroups: Dict[int, List[int]],
 
 
 def score_clusterblast_output(clusters: Dict[str, ReferenceCluster], allcoregenes: Set[str],
-                              cluster_names_to_queries: Dict[str, List[Query]]
+                              records_to_queries: Dict[str, List[Query]]
                               ) -> List[Tuple[ReferenceCluster, Score]]:
     """ Generate scores for all cluster matches
 
@@ -654,7 +813,7 @@ def score_clusterblast_output(clusters: Dict[str, ReferenceCluster], allcoregene
         Arguments:
             clusters: a dict mapping reference cluster name to ReferenceCluster
             allcoregenes: a set of all CDS accessions from the current record
-            cluster_names_to_queries: a dictionary mapping reference cluster name
+            area_to_queries: a dictionary mapping reference cluster name
                                         to a list of matching Query instances
 
         Returns:
@@ -662,25 +821,27 @@ def score_clusterblast_output(clusters: Dict[str, ReferenceCluster], allcoregene
             decreasing score.
     """
     results = {}
-    for cluster_label, queries in cluster_names_to_queries.items():
-        single_gene_reference = len(clusters[cluster_label].proteins) == 1
-        result, hitpositions, hitposcorelist = parse_clusterblast_dict(queries, clusters, cluster_label, allcoregenes)
-        if not result.hits:
-            continue
-        if not single_gene_reference and result.hits <= 1:
-            continue
-        hitgroups = find_clusterblast_hitsgroups(hitpositions)
-        # combines both synteny scores
-        result.synteny_score = calculate_synteny_score(hitgroups, hitpositions, hitposcorelist)
-        initial = hitpositions[0][1]
-        # if only one gene in reference, use it
-        if single_gene_reference and len(hitpositions) == 1:
-            results[clusters[cluster_label]] = result
-        # otherwise ensure at least two different subjects were found
-        for _, subject in hitpositions[1:]:
-            if subject != initial:
-                results[clusters[cluster_label]] = result
-                break
+    print(clusters)
+    for record, area_queries in records_to_queries.items():
+        for area, queries in area_queries.items():
+            single_gene_reference = len(clusters[record][area].proteins) == 1
+            result, hitpositions, hitposcorelist = parse_clusterblast_dict(queries, clusters, record, area, allcoregenes)
+            if not result.hits:
+                continue
+            if not single_gene_reference and result.hits <= 1:
+                continue
+            hitgroups = find_clusterblast_hitsgroups(hitpositions)
+            # combines both synteny scores
+            result.synteny_score = calculate_synteny_score(hitgroups, hitpositions, hitposcorelist)
+            initial = hitpositions[0][1]
+            # if only one gene in reference, use it
+            if single_gene_reference and len(hitpositions) == 1:
+                results[clusters[record][area]] = result
+            # otherwise ensure at least two different subjects were found
+            for _, subject in hitpositions[1:]:
+                if subject != initial:
+                    results[clusters[record][area]] = result
+                    break
     # Sort gene clusters by score
     return sorted(results.items(), reverse=True, key=lambda x: x[1].sort_score())
 
