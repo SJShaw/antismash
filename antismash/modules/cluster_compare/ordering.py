@@ -1,12 +1,27 @@
 # License: GNU Affero General Public License v3 or later
 # A copy of GNU AGPL v3 should have been included in this software package in LICENSE.txt.
 
+from typing import (
+    Any,
+    Dict,
+    List,
+    Sequence,
+    Tuple,
+)
+
+from antismash.common.secmet import CDSFeature
+
+from .data_structures import Hit
+
+Pairing = Tuple[int, int, bool]
+
+
 NORMALISATION_TARGET = (0.8, 0.8)  # (desired score, required percentage contiguous matches)
 EXTRA_SEGMENT_PENALTY = 0.75  # for multiple disjoint segments
 REVERSED_SEGMENT_PENALTY = 0.9  # for when the strand of a segment doesn't match
 
 
-def calculate_order_score(area_features, hits, ref_data):
+def calculate_order_score(area_features: Sequence[CDSFeature], hits: Dict[str, Hit], ref_data: Dict[str, Any]) -> float:
     if not hits:
         return 0.
     # build lists of reference features and features ordered by location
@@ -15,13 +30,13 @@ def calculate_order_score(area_features, hits, ref_data):
 #    reference_feature_order = {v: k for k, v in ref_data["regions"][0]["cds_mapping"]}
 
     segments = find_segments(hits, area_features, reference_features, ref_data["cds_mapping"])
-    assert segments, hits[0].reference_id
+    assert segments
     max_possible = min(len(area_features), len(reference_features))
 
     return score_segments(segments, max_possible)
 
 
-def _build_segments_from_pairings(pairings, loud=False):
+def _build_segments_from_pairings(pairings: Sequence[Pairing], loud: bool = False) -> List[List[Pairing]]:
     segments = [[pairings[0]]]
     if loud:
         print("prev_pair, pairing, [strandcont, cds_contig, ref_contig]")
@@ -46,7 +61,7 @@ def _build_segments_from_pairings(pairings, loud=False):
     return segments
 
 
-def find_segments(hits, features, reference_features, mapping):
+def find_segments(hits: Dict[str, Hit], features: Sequence[CDSFeature], reference_features: List[Dict[str, Any]], mapping: Dict[str, int]) -> List[List[Pairing]]:
 
     # features should always be sorted
     assert sorted(features) == features
@@ -63,7 +78,7 @@ def find_segments(hits, features, reference_features, mapping):
     return _build_segments_from_pairings(pairings)
 
 
-def score_segments(segments, max_possible):
+def score_segments(segments: List[List[Pairing]], max_possible: int) -> float:
     # calculate the base of the exponential scoring function
     base = (1/NORMALISATION_TARGET[1])**(1/((1-NORMALISATION_TARGET[0])*max_possible))
 
@@ -76,7 +91,9 @@ def score_segments(segments, max_possible):
     result *= EXTRA_SEGMENT_PENALTY**(len(segments)-1)
 
     # penalise for having incorrect strands for a segment
-    reversed_segments = []
+    reversed_segments = []  # type: List[List[Pairing]]
+    # TODO: reversed is always empty
+
     result *= REVERSED_SEGMENT_PENALTY**len(reversed_segments)
 
     # normalise by theoretical perfect score

@@ -18,6 +18,7 @@ def will_handle(_products: List[str]) -> bool:
         product """
     return True
 
+
 def generate_html(region_layer: RegionLayer, results: ClusterCompareResults,
                   record_layer: RecordLayer, options_layer: OptionsLayer
                   ) -> HTMLSections:
@@ -30,12 +31,14 @@ def generate_html(region_layer: RegionLayer, results: ClusterCompareResults,
                     "Click on reference genes to show details of similarities to "
                     "genes within the current region.")
 
-    # TODO  variants
+    # TODO adjust tooltip by variant
     tooltip = base_tooltip % "clusters from the MiBIG database"
     tooltip += "<br>Click on an accession to open that entry in the MiBIG database."
-    scores = results.scores_by_region.get(region_layer.get_region_number(), [])[:10]
-    div = generate_div(region_layer, record_layer, options_layer, "mibig", tooltip, scores, results.scores_by_protocluster)
-    html.add_detail_section("known-cluster-compare", div, "known-cluster-compare")
+    for variant, result in results.get_all_variants().items():
+        scores = result.scores_by_region.get(region_layer.get_region_number(), [])[:10]
+        div = generate_div(region_layer, record_layer, options_layer, "mibig", tooltip, scores, result.scores_by_protocluster)
+        tag = "%s-cluster-compare" % (variant.replace(" ", "-"))
+        html.add_detail_section(tag, div, tag)
 
     return html
 
@@ -52,47 +55,52 @@ def generate_div(region_layer: RegionLayer, record_layer: RecordLayer,
 
 def generate_javascript_data(record: Record, region: Region, results: ClusterCompareResults) -> Dict[str, Any]:
     data = {
-        "reference_clusters": {},
     }
-    # TODO variants
-    known = results.scores_by_region.get(region.get_region_number(), [])[:10]
-    if not known:
-        return {}
-    for accession, totalscore_ref in known:
-        totalscore, ref = totalscore_ref
-        genes = ref.get_cds_json()
-        for name, gene in genes.items():
-            gene["locus_tag"] = name
-            location = locations.location_from_string(gene["location"])
-            gene["start"] = location.start
-            gene["end"] = location.end
-            gene["strand"] = location.strand
-            gene["linked"] = {}
-        ref_entry = {  # TODO: merge these for different protoclusters
-            "links": [],
-            "start": ref.start,
-            "end": ref.end,
+    for variant, result in results.get_all_variants().items():
+        variant_data = {
+            "reference_clusters": {}
         }
-        data["reference_clusters"][accession] = ref_entry
 
-        mismatching_strands = 0
-        for ref_cds_id, hit in results.hits_by_region.get(region.get_region_number(), {}).get(accession, {}).items():
-            hit = hit[0]
-            assert locations.locations_overlap(hit.cds.location, region.location)
-            query_cds = hit.cds
-            query_point = query_cds.location.start + (query_cds.location.end - query_cds.location.start) // 2
-            ref_cds = ref.cdses[ref.cds_mapping[ref_cds_id]]
-            ref_location = locations.location_from_string(ref_cds.location)
-            subject_point = ref_location.start + (ref_location.end - ref_location.start) // 2
-            if query_cds.location.strand != ref_location.strand:
-                mismatching_strands += 1
-            genes[ref_cds.name]["linked"][region.get_region_number()] = query_cds.get_name()
-            ref_entry["links"].append({
-                "query": query_cds.get_name(),
-                "subject": ref_cds.name,
-                "query_loc": query_point,
-                "subject_loc": subject_point,
-            })
-        ref_entry["reverse"] = mismatching_strands > len(ref_entry["links"]) / 2
-        ref_entry["genes"] = list(genes.values())
+        scores = result.scores_by_region.get(region.get_region_number(), [])[:10]
+        if not scores:
+            continue
+
+        data[variant] = variant_data
+
+        for accession, totalscore_ref in scores:
+            _, ref = totalscore_ref
+            genes = ref.get_cds_json()
+            for name, gene in genes.items():
+                gene["locus_tag"] = name
+                location = locations.location_from_string(gene["location"])
+                gene["start"] = location.start
+                gene["end"] = location.end
+                gene["strand"] = location.strand
+                gene["linked"] = {}
+            ref_entry = {  # TODO: merge these for different protoclusters
+                "links": [],
+                "start": ref.start,
+                "end": ref.end,
+            }
+            variant_data["reference_clusters"][accession] = ref_entry
+
+            mismatching_strands = 0
+            for ref_cds_id, hit in result.hits_by_region.get(region.get_region_number(), {}).get(accession, {}).items():
+                assert locations.locations_overlap(hit.cds.location, region.location)
+                query_cds = hit.cds
+                query_point = query_cds.location.start + (query_cds.location.end - query_cds.location.start) // 2
+                ref_cds = ref.cdses[ref.cds_mapping[ref_cds_id]]
+                ref_location = locations.location_from_string(ref_cds.location)
+                subject_point = ref_location.start + (ref_location.end - ref_location.start) // 2
+                if query_cds.location.strand != ref_location.strand:
+                    mismatching_strands += 1
+                genes[ref_cds.name]["linked"][region.get_region_number()] = query_cds.get_name()
+                ref_entry["links"].append({
+                    "query": query_cds.get_name(),
+                    "subject": ref_cds.name,
+                    "query_loc": query_point,
+                    "subject_loc": subject_point,
+                })
+            ref_entry["reverse"] = mismatching_strands > len(ref_entry["links"]) / 2
+            ref_entry["genes"] = list(genes.values())
     return data

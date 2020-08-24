@@ -6,18 +6,28 @@ import json
 import logging
 import math
 from tempfile import NamedTemporaryFile
-from typing import Dict, List
+from typing import (
+    Any,
+    Dict,
+    List,
+    Set,
+    Tuple,
+)
 
 from antismash.common import fasta, path, subprocessing
 from antismash.common.secmet import (
     CDSFeature,
     Record,
 )
+from antismash.common.secmet.features import CDSCollection
 
 from .components import calculate_component_score
-from .data_structures import load_data, ReferenceArea
+from .data_structures import load_data, Hit, RawRecord, RawRegion, ScoresByRegion, ScoresByProtocluster, ReferenceScorer
 from .ordering import calculate_order_score
-from .results import ClusterCompareResults
+from .results import ClusterCompareResults, VariantResults
+
+HitsByCDS = Dict[CDSFeature, Dict[str, List[Hit]]]
+HitsByReference = Dict[str, Dict[str, List[Hit]]]
 
 LEGACY_SCORES = {  # 1192
     "BGC0001192.1": (14, 35747.0/35747, 1),
@@ -44,76 +54,9 @@ KIRRO_SCORES = {   # kirromycin/1070
 }
 
 
-class ReferenceScorer:
-    def __init__(self, accession, data, hits_by_gene, reference, area_features):
-        self.accession = accession
-        self.data = data
-        self.hits_by_gene = trim_to_best_hit(hits_by_gene)
-        self._identity = -1.
-        self._order = -1.
-        self._components = -1.
-        self.reference = reference.regions[0]  # TODO
-        self._raw_identity = -1.
-        self._max_id = -1.
-        self._area_features = area_features
-
-    def calc_identity(self, max_id):
-        self._max_id = max_id
-        return self.identity
-
-    @property
-    def final_score(self) -> float:
-        return (self.identity * self.order * self.components) ** (1/3)
-
-    @property
-    def raw_identity(self) -> float:
-        if self._raw_identity < 0:
-            self._raw_identity = sum(hit.identity_score for hit in self.hits_by_gene.values())
-        return self._raw_identity
-
-    @property
-    def identity(self) -> float:
-        assert self._max_id > 0
-        if self._identity < 0:
-            self._identity = calculate_identity_score(self.raw_identity, self._max_id)
-        assert 0 <= self._identity <= 1, (self._identity, self.raw_identity, self._max_id)
-        return self._identity
-
-    @property
-    def order(self) -> float:
-        if self._order < 0:
-            self._order = calculate_order_score(sorted(self._area_features), self.hits_by_gene, self.data)
-        return self._order
-
-    @property
-    def components(self) -> float:
-        if self._components < 0:
-            self._components = calculate_component_score(self._area_features, self.hits_by_gene, self.data)
-        return self._components
-
-    def __repr__(self) -> str:
-        return "ReferenceScorer(%s)" % (str(self))
-
-    def __str__(self) -> str:
-        return "%s: raw_id=%.2f, order=%.2f, comp=%.2f" % (
-            self.accession,
-            self.identity,
-            self.order,
-            self.components,
-        )
-
-    def table_string(self) -> str:
-        return "%.2f (id:%.2f, order:%.2f, components:%.2f)" % (
-            self.final_score,
-            self.identity,
-            self.order,
-            self.components,
-        )
-
-
-def filter_by_area(area, hits_by_reference):
+def filter_by_area(area: CDSCollection, hits_by_reference: Dict[str, Dict[str, List[Hit]]]) -> Dict[str, Dict[str, List[Hit]]]:
     region_cds_names = {cds.get_name() for cds in area.cds_children}
-    hits_for_area = defaultdict(lambda: defaultdict(list))
+    hits_for_area = defaultdict(lambda: defaultdict(list))  # type: Dict[str, Dict[str, List[Hit]]]
     for cluster, hits_by_cluster in hits_by_reference.items():
         for ref_id, hits in hits_by_cluster.items():
             for hit in hits:
@@ -122,30 +65,22 @@ def filter_by_area(area, hits_by_reference):
     return hits_for_area
 
 
-def run(record: Record):
-    if not record.get_regions():
-        return ClusterCompareResults(record.id, [], [], [])
-
-    # TODO handle custom databases
-    with open(path.get_full_path(__file__, "data", "data.json")) as handle:
-        ref_data = json.loads(handle.read())
-    processed = load_data(path.get_full_path(__file__, "data", "data.json"))
-    by_query, by_reference = find_diamond_matches(record, path.get_full_path(__file__, "data", "proteins.dmnd"))
-
-    scores_by_region = {}
+def run_PC_TO_ALL(record: Record, ref_data, processed, by_reference) -> VariantResults:
+    scores_by_region = {}  # type: ScoresByRegion
     scores_by_protocluster = {}
     hits_by_region = {}
 
     for region in record.get_regions():
         hits_for_region = filter_by_area(region, by_reference)
-        for ref, ref_hits in hits_for_region.items():
-            hits_for_region[ref] = trim_to_best_hit(ref_hits)
-        if not hits_for_region:
+        best_hits_for_region = {ref: trim_to_best_hit(hits) for ref, hits in hits_for_region.items()}
+        if not best_hits_for_region:
             continue
-        scores_within_region = defaultdict(list)
+        scores_within_region = defaultdict(list)  # type: ScoresByProtocluster
         for protocluster in region.get_unique_protoclusters():
             hits_for_protocluster = filter_by_area(protocluster, hits_for_region)
-            scores = {accession: ReferenceScorer(accession, ref_data[accession], hits, processed[accession], protocluster.cds_children) for accession, hits in hits_for_protocluster.items()}
+            scores = {accession: ReferenceScorer(accession, ref_data[accession], trim_to_best_hit(hits), processed[accession], protocluster.cds_children,
+                                                 calculate_identity_score, calculate_order_score, calculate_component_score)
+                      for accession, hits in hits_for_protocluster.items()}
             if not scores:
                 continue
             max_id = max(1, max(score.raw_identity for score in scores.values()))
@@ -156,17 +91,32 @@ def run(record: Record):
             scores_within_region[region.get_region_number()].extend(scores.items())
 
         # rank the results for a region differently
-        region_ranking = defaultdict(float)
+        region_ranking = defaultdict(float)  # type: Dict[str, float]
         for ref_accession, score in scores_within_region[region.get_region_number()]:
             region_ranking[ref_accession] += score.final_score
         ranking = sorted(region_ranking.items(), key=lambda x: x[1], reverse=True)
         scores_by_region[region.get_region_number()] = [(acc, (score, processed[acc].regions[0])) for acc, score in ranking]  # TODO handle multiple regions in a ref record
-        hits_by_region[region.get_region_number()] = hits_for_region
+        hits_by_region[region.get_region_number()] = best_hits_for_region
 
-    return ClusterCompareResults(record.id, scores_by_region, scores_by_protocluster, hits_by_region)
+    return VariantResults("PC_TO_ALL", scores_by_region, scores_by_protocluster, hits_by_region)
 
 
-def calculate_identity_score(score, max_score) -> float:
+def run(record: Record) -> ClusterCompareResults:
+    results = ClusterCompareResults(record.id)
+    if not record.get_regions():
+        return results
+
+    # TODO handle custom databases
+    with open(path.get_full_path(__file__, "data", "data.json")) as handle:
+        ref_data = json.loads(handle.read())
+    processed = load_data(path.get_full_path(__file__, "data", "data.json"))
+    _, by_reference = find_diamond_matches(record, path.get_full_path(__file__, "data", "proteins.dmnd"))
+
+    results.add_variant_results(run_PC_TO_ALL(record, ref_data, processed, by_reference))
+    return results
+
+
+def calculate_identity_score(score: float, max_score: float) -> float:
     normalised = score / max_score
     # avoid division by 0
     if normalised > 1. - 1e-8:
@@ -179,7 +129,7 @@ def calculate_identity_score(score, max_score) -> float:
     return result
 
 
-def trim_to_best_hit(hits_by_reference_gene):
+def trim_to_best_hit(hits_by_reference_gene: Dict[str, List[Hit]]) -> Dict[str, Hit]:
     pairs = {}
     for ref, hits in hits_by_reference_gene.items():
         for hit in hits:
@@ -187,9 +137,9 @@ def trim_to_best_hit(hits_by_reference_gene):
 
     best_first = (i[0] for i in sorted(pairs.items(), key=lambda x: x[1], reverse=True))
 
-    mapping = {}
+    mapping = {}  # type: Dict[str, Hit]
 
-    features = set()
+    features = set()  # type: Set[CDSFeature]
     for ref, hit in best_first:
         if hit.cds in features or ref in mapping:
             continue
@@ -200,7 +150,8 @@ def trim_to_best_hit(hits_by_reference_gene):
     return mapping
 
 
-def find_diamond_matches(record: Record, database: str):
+def find_diamond_matches(record: Record, database: str) -> Tuple[Dict[CDSFeature, Dict[str, List[Hit]]],
+                                                                 Dict[str, Dict[str, List[Hit]]]]:
     """ Runs diamond, comparing all features in the given regions to the given database
 
         Arguments:
@@ -217,7 +168,7 @@ def find_diamond_matches(record: Record, database: str):
         "--evalue", "1e-05",
         "--outfmt", "6",  # 6 is blast tabular format, just as in blastp
     ]
-    features = []
+    features = []  # type: List[CDSFeature]
     for region in record.get_regions():
         features.extend(region.cds_children)
     assert features
@@ -226,38 +177,17 @@ def find_diamond_matches(record: Record, database: str):
         temp_file.write(fasta.get_fasta_from_features(features, numeric_names=True).encode())
         raw = subprocessing.run_diamond_search(temp_file.name, database, mode="blastp", opts=extra_args)
 
-    return blast_parse(raw, dict(enumerate(features)))
+    return blast_parse(raw, {i: feature for i, feature in enumerate(features)})
 
 
-class Hit:
-    def __init__(self, reference_cluster: str, reference_id: str, cds: CDSFeature,
-                 percent_identity: int, blast_score: int, percent_coverage: int, evalue: float) -> None:
-        self.reference_cluster = reference_cluster  # TODO actually reference record, need to split into regions/protoclusters
-        self.reference_id = reference_id
-        self.cds = cds
-        self.percent_identity = percent_identity
-        self.blast_score = blast_score
-        self.percent_coverage = percent_coverage
-        self.evalue = evalue
-
-    @property
-    def identity_score(self) -> float:
-        return self.blast_score * self.percent_coverage
-
-    def __repr__(self) -> str:
-        return "%s(pid=%d,cov%d)" % (self.reference_id, self.percent_identity, self.percent_coverage)
-
-
-def blast_parse(diamond_output: str, inputs_to_features,
-                min_seq_coverage: float = 30., min_perc_identity: float = 25.):
+def blast_parse(diamond_output: str, inputs_to_features: Dict[int, CDSFeature],
+                min_seq_coverage: float = 30., min_perc_identity: float = 25.) -> Tuple[HitsByCDS, HitsByReference]:
     """ Parses blast output into a usable form, limiting to a single best hit
         for every query. Results can be further trimmed by minimum thresholds of
         both coverage and percent identity.
 
         Arguments:
             diamond_output: the output from diamond in blast format
-            record: used to get all gene ids in the cluster, and used as a
-                    backup to fetch sequence length if missing from seqlengths
             min_seq_coverage: the exclusive lower bound of sequence coverage for a match
             min_perc_identity: the exclusive lower bound of identity similarity for a match
 
@@ -267,8 +197,8 @@ def blast_parse(diamond_output: str, inputs_to_features,
                 a dictionary mapping cluster number to
                     a list of Query instances from that cluster
     """  # TODO update args
-    hits_by_cds = defaultdict(lambda: defaultdict(list))  # type: Dict[CDSFeature, Dict[str, List[Hit]]]
-    hits_by_reference = defaultdict(lambda: defaultdict(list))
+    hits_by_cds = defaultdict(lambda: defaultdict(list))  # type: HitsByCDS
+    hits_by_reference = defaultdict(lambda: defaultdict(list))  # type: HitsByReference
     for line in diamond_output.splitlines():
         hit = parse_hit(line.split("\t"), inputs_to_features)
         if not (hit.percent_identity >= min_perc_identity and hit.percent_coverage >= min_seq_coverage):
@@ -278,7 +208,7 @@ def blast_parse(diamond_output: str, inputs_to_features,
     return hits_by_cds, hits_by_reference
 
 
-def parse_hit(parts: List[str], feature_mapping: Dict[str, CDSFeature]) -> None:  # TODO
+def parse_hit(parts: List[str], feature_mapping: Dict[int, CDSFeature]) -> Hit:
 
     # 0. 	 qseqid 	 query (e.g., gene) sequence id
     # 1. 	 sseqid 	 subject (e.g., reference genome) sequence id

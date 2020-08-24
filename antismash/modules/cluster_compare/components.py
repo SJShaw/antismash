@@ -2,20 +2,30 @@
 # A copy of GNU AGPL v3 should have been included in this software package in LICENSE.txt.
 
 from collections import defaultdict
+from typing import (
+    Any,  # TODO preferably remove this
+    Dict,
+    Sequence,
+    Tuple,
+)
 
+from antismash.common.secmet import CDSFeature
 from antismash.common.secmet.qualifiers.gene_functions import GeneFunction
 
 
+SubComponents = Dict[Any, int]
+
+
 class Components:
-    def __init__(self, nrps, pks, secmet, functions):
+    def __init__(self, nrps: SubComponents, pks: SubComponents, secmet: SubComponents, functions: SubComponents) -> None:
         self.nrps = nrps
         self.pks = pks
         self.secmet = secmet
         self.functions = functions
 
-    def __str__(self):
+    def __str__(self) -> str:
         import json
-        things = {
+        things = {  # TODO: better naming
             "nrps": self.nrps,
             "pks": self.pks,
             "secmet": self.secmet,
@@ -27,14 +37,14 @@ class Components:
         return "\n".join(parts)
 
 
-def calculate_component_score(area_features, hits, ref_data, loud=False):
+def calculate_component_score(area_features: Sequence[CDSFeature], ref_data: Dict[str, Any], loud: bool = False) -> float:
     ref = gather_reference_components(ref_data["regions"][0])  # TODO should be handled further up
     # TODO don't repeat the query gather here, do it once per area
     query = gather_query_components(area_features)
     return compare(ref, query, loud=loud)
 
 
-def compare(ref, query, loud=False):
+def compare(ref: Components, query: Components, loud: bool = False) -> float:
     nrps = compare_modules(ref.nrps, query.nrps)
     if loud:
         print("nrps", nrps)
@@ -48,10 +58,11 @@ def compare(ref, query, loud=False):
     if loud:
         print("functions", functions)
     max_modules = sum(ref.pks.values()) + sum(ref.nrps.values())
-    modules = 1
+    modules = 1.
     if max_modules:
         nrps_weighting = sum(ref.nrps.values()) / max_modules
-        if loud: print(nrps, "*", nrps_weighting, "+", pks, "*", (1-nrps_weighting))
+        if loud:
+            print(nrps, "*", nrps_weighting, "+", pks, "*", (1-nrps_weighting))
         if 0.001 <= nrps_weighting <= 0.999:
             modules = (nrps * nrps_weighting + pks * (1-nrps_weighting)) / 2
         elif nrps_weighting >= 0.999:
@@ -63,11 +74,10 @@ def compare(ref, query, loud=False):
     assert 0 <= functions <= 1, functions
     if max_modules:
         return sum([modules, secmet, functions]) / 3
-    else:
-        return (secmet + functions) / 2
+    return (secmet + functions) / 2
 
 
-def compare_combos(ref, query, loud=False):
+def compare_combos(ref: SubComponents, query: SubComponents, loud: bool = False) -> float:
     if not ref:
         return 1.
     if not query:
@@ -90,7 +100,7 @@ def compare_combos(ref, query, loud=False):
     return min(found / max_possible, 1.)
 
 
-def compare_modules(ref, query, loud=False):
+def compare_modules(ref: SubComponents, query: SubComponents, loud: bool = False) -> float:
     if not ref:
         return 1.
     if not query:
@@ -107,7 +117,7 @@ def compare_modules(ref, query, loud=False):
 
     assert max_possible
 
-    found = 0
+    found = 0.
     for combo in ref_combos.intersection(query_combos):
         found += query[combo]
 
@@ -120,11 +130,11 @@ def compare_modules(ref, query, loud=False):
     return found / max_possible
 
 
-def gather_reference_components(ref_data):
-    nrps = defaultdict(int)
-    pks = defaultdict(int)
-    secmet = defaultdict(int)
-    functions = defaultdict(int)
+def gather_reference_components(ref_data: Dict[str, Any]) -> Components:
+    nrps = defaultdict(int)  # type: SubComponents
+    pks = defaultdict(int)  # type: SubComponents
+    secmet = defaultdict(int)  # type: SubComponents
+    functions = defaultdict(int)  # type: SubComponents
 
     for cds in ref_data["cdses"].values():
         if cds["function"] != "other":
@@ -148,11 +158,11 @@ def gather_reference_components(ref_data):
     return Components(nrps, pks, secmet, functions)
 
 
-def gather_query_components(area_features):
-    nrps = defaultdict(int)
-    pks = defaultdict(int)
-    secmet = defaultdict(int)
-    functions = defaultdict(int)
+def gather_query_components(area_features: Sequence[CDSFeature]) -> Components:
+    nrps = defaultdict(int)  # type: SubComponents
+    pks = defaultdict(int)  # type: SubComponents
+    secmet = defaultdict(int)  # type: SubComponents
+    functions = defaultdict(int)  # type: SubComponents
 
     for cds in area_features:
         if cds.gene_function != GeneFunction.OTHER:
@@ -171,5 +181,5 @@ def gather_query_components(area_features):
                 target = nrps
             else:
                 assert False, module.module_type  # TODO possibly handle unknowns
-            target[tuple(domain.domain.split("_")[0] if domain.domain.startswith("Condensation_") else domain.domain for domain in module.domains)] += 1
+            target[tuple(domain.domain.split("_")[0] if domain.domain.startswith("Condensation_") else domain.domain for domain in module.domains if domain.domain)] += 1
     return Components(nrps, pks, secmet, functions)
