@@ -8,11 +8,11 @@ from typing import Any, Dict, Optional
 from antismash.common.module_results import ModuleResults
 from antismash.common.secmet import Record
 
-from .data_structures import ScoresByRegion, ScoresByProtocluster
+from .data_structures import ScoresByRegion, ScoresByProtocluster, Hit
 
 
 class VariantResults:
-    def __init__(self, variant_name: str, scores_by_region: ScoresByRegion, scores_by_protocluster: ScoresByProtocluster, hits_by_region) -> None:
+    def __init__(self, variant_name: str, scores_by_region: ScoresByRegion, scores_by_protocluster: ScoresByProtocluster, hits_by_region: Dict[int, Dict[str, Dict[str, Hit]]]) -> None:
         assert variant_name
         self.variant_name = variant_name
         self.scores_by_region = scores_by_region

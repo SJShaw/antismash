@@ -4,9 +4,10 @@
 """ A collection of data structures for use in the rest of the module"""
 
 import json
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from antismash.common.secmet import CDSFeature
+from antismash.common.secmet.locations import location_from_string
 
 
 class Hit:
@@ -25,7 +26,7 @@ class Hit:
         return self.blast_score * self.percent_coverage
 
     def __repr__(self) -> str:
-        return "%s(pid=%d,cov%d)" % (self.reference_id, self.percent_identity, self.percent_coverage)
+        return "%s->%s(pid=%d,cov%d)" % (self.cds.get_name(), self.reference_id, self.percent_identity, self.percent_coverage)
 
 
 class RawCDS:
@@ -34,22 +35,63 @@ class RawCDS:
         self.function = function
         self.components = components
         self.location = location
+        self._start = None  # type: Optional[int]
+        self._end = None  # type: Optional[int]
+
+    def overlaps_with(self, area_start: int, area_end: int) -> bool:
+        if self._start is None or self._end is None:
+            loc = location_from_string(self.location)
+            self._start = loc.start
+            self._end = loc.end
+        return self._end > area_start and self._start < area_end
 
     @classmethod
     def from_json(cls, name: str, data: Dict[str, Any]) -> "RawCDS":
         return cls(name, data["function"], data["components"], data["location"])
+
+    def __lt__(self, other: "RawCDS") -> bool:
+        if not isinstance(other, RawCDS):
+            raise TypeError("Cannot compare RawCDS to %s" % type(other))
+        return self._start < other._start
+
+    def __str__(self) -> str:
+        return "RawCDS(%s, %s)" % (self.name, self.location)
 
 
 class RawProtocluster:
     def __init__(self, cores: List[RawCDS], product: str, location: str) -> None:
         self.cores = cores
         self.product = product
-        self.location = location
+        self._location = location
+        self._start = None  # type: Optional[int]
+        self._end = None  # type: Optional[int]
+
+    @property
+    def start(self) -> int:
+        if self._start is None:
+            loc = location_from_string(self._location)  # TODO: don't even store biopython locs for protoclusters
+            self._start = loc.start
+            self._end = loc.end
+        return self._start
+
+    @property
+    def end(self) -> int:
+        if self._end is None:
+            loc = location_from_string(self._location)  # TODO: don't even store biopython locs for protoclusters
+            self._start = loc.start
+            self._end = loc.end
+        return self._end
 
     @classmethod
     def from_json(cls, data: Dict[str, Any], cdses: Dict[str, RawCDS]) -> "RawProtocluster":
         cores = [cdses[core] for core in data["core_cdses"]]
         return cls(cores, data["product"], data["location"])
+
+    def __str__(self) -> str:
+        return "RawProtocluster(%s, %s, %s...)" % (self.start, self.end, self.product)
+
+    def __repr__(self) -> str:
+        return str(self)
 
 
 class RawRegion:
@@ -83,6 +125,11 @@ class RawRegion:
     def get_cds_json(self) -> Dict[str, Any]:
         return self.raw_cdses
 
+    def __str__(self) -> str:
+        return "RawRegion(%s, %s, %s...)" % (self.start, self.end, self.products)
+
+    def __repr__(self) -> str:
+        return str(self)
 
 class RawRecord:
     def __init__(self, accession: str, regions: List[RawRegion], cds_mapping: Dict[int, str]) -> None:
@@ -132,8 +179,8 @@ class ReferenceArea:
 class ReferenceScorer:
     def __init__(self, accession: str, data: Dict[str, Any], best_hits: Dict[str, Hit],
                  reference: RawRecord, area_features: Tuple[CDSFeature, ...],
-                 ident_calculator: Callable, order_calculator: Callable, component_calculator: Callable
-                 ) -> None:  # TODO parse data to object
+                 ident_calculator: Callable, order_calculator: Callable, component_calculator: Callable,
+                 area_limit: Tuple[int, int] = None) -> None:  # TODO parse data to object
         self.accession = accession
         self.data = data
         self.hits_by_gene = best_hits
@@ -147,6 +194,7 @@ class ReferenceScorer:
         self._ident_calculator = ident_calculator
         self._order_calculator = order_calculator
         self._component_calculator = component_calculator
+        self._area_limit = area_limit
 
     def calc_identity(self, max_id: float) -> float:
         self._max_id = max_id
@@ -173,20 +221,20 @@ class ReferenceScorer:
     @property
     def order(self) -> float:
         if self._order < 0:
-            self._order = self._order_calculator(sorted(self._area_features), self.hits_by_gene, self.data)
+            self._order = self._order_calculator(sorted(self._area_features), self.hits_by_gene, self.data, limit_to_area=self._area_limit)
         return self._order
 
     @property
     def components(self) -> float:
         if self._components < 0:
-            self._components = self._component_calculator(self._area_features, self.data)
+            self._components = self._component_calculator(self._area_features, self.data, limit_to_area=self._area_limit)
         return self._components
 
     def __repr__(self) -> str:
-        return "ReferenceScorer(%s)" % (str(self))
+        return str(self)
 
     def __str__(self) -> str:
-        return "%s: raw_id=%.2f, order=%.2f, comp=%.2f" % (
+        return "ReferenceScorer(%s: raw_id=%.2f, order=%.2f, comp=%.2f)" % (
             self.accession,
             self.identity,
             self.order,
@@ -194,7 +242,7 @@ class ReferenceScorer:
         )
 
     def table_string(self) -> str:
-        return "%.2f (id:%.2f, order:%.2f, components:%.2f)" % (
+        return "ReferenceScorer(%.2f (id:%.2f, order:%.2f, components:%.2f))" % (
             self.final_score,
             self.identity,
             self.order,

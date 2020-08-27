@@ -8,10 +8,12 @@ import math
 from tempfile import NamedTemporaryFile
 from typing import (
     Any,
+    Callable,
     Dict,
     List,
     Set,
     Tuple,
+    TypeVar,
 )
 
 from antismash.common import fasta, path, subprocessing
@@ -20,14 +22,16 @@ from antismash.common.secmet import (
     Record,
 )
 from antismash.common.secmet.features import CDSCollection
+from antismash.common.secmet.locations import location_from_string
 
-from .components import calculate_component_score
-from .data_structures import load_data, Hit, RawRecord, RawRegion, ScoresByRegion, ScoresByProtocluster, ReferenceScorer
-from .ordering import calculate_order_score
+from .components import calculate_component_score, calculate_component_score_ref_in_query, calculate_component_score_query_in_ref
+from .data_structures import load_data, Hit, RawRecord, RawRegion, ScoresByRegion, ScoresByProtocluster, ReferenceScorer, RawProtocluster
+from .ordering import calculate_order_score, calculate_order_score_ref_in_query, calculate_order_score_query_in_ref
 from .results import ClusterCompareResults, VariantResults
 
 HitsByCDS = Dict[CDSFeature, Dict[str, List[Hit]]]
 HitsByReference = Dict[str, Dict[str, List[Hit]]]
+T = TypeVar("T")
 
 LEGACY_SCORES = {  # 1192
     "BGC0001192.1": (14, 35747.0/35747, 1),
@@ -54,18 +58,18 @@ KIRRO_SCORES = {   # kirromycin/1070
 }
 
 
-def filter_by_area(area: CDSCollection, hits_by_reference: Dict[str, Dict[str, List[Hit]]]) -> Dict[str, Dict[str, List[Hit]]]:
-    region_cds_names = {cds.get_name() for cds in area.cds_children}
-    hits_for_area = defaultdict(lambda: defaultdict(list))  # type: Dict[str, Dict[str, List[Hit]]]
-    for cluster, hits_by_cluster in hits_by_reference.items():
-        for ref_id, hits in hits_by_cluster.items():
+def filter_by_area(area: CDSCollection, hits_by_reference: Dict[T, Dict[str, List[Hit]]]) -> Dict[T, Dict[str, List[Hit]]]:
+    area_cds_names = {cds.get_name() for cds in area.cds_children}
+    hits_for_area = defaultdict(lambda: defaultdict(list))  # type: Dict[T, Dict[str, List[Hit]]]
+    for ref_area, hits_by_ref_area in hits_by_reference.items():
+        for ref_id, hits in hits_by_ref_area.items():
             for hit in hits:
-                if hit.cds.get_name() in region_cds_names:
-                    hits_for_area[cluster][ref_id].append(hit)
+                if hit.cds.get_name() in area_cds_names:
+                    hits_for_area[ref_area][ref_id].append(hit)
     return hits_for_area
 
 
-def run_PC_TO_ALL(record: Record, ref_data, processed, by_reference) -> VariantResults:
+def run_PC_TO_ALL(record: Record, ref_data, processed: Dict[str, RawRecord], by_reference: HitsByReference, name: str, order: Callable, component: Callable) -> VariantResults:
     scores_by_region = {}  # type: ScoresByRegion
     scores_by_protocluster = {}
     hits_by_region = {}
@@ -79,7 +83,7 @@ def run_PC_TO_ALL(record: Record, ref_data, processed, by_reference) -> VariantR
         for protocluster in region.get_unique_protoclusters():
             hits_for_protocluster = filter_by_area(protocluster, hits_for_region)
             scores = {accession: ReferenceScorer(accession, ref_data[accession], trim_to_best_hit(hits), processed[accession], protocluster.cds_children,
-                                                 calculate_identity_score, calculate_order_score, calculate_component_score)
+                                                 calculate_identity_score, order, component)
                       for accession, hits in hits_for_protocluster.items()}
             if not scores:
                 continue
@@ -98,7 +102,116 @@ def run_PC_TO_ALL(record: Record, ref_data, processed, by_reference) -> VariantR
         scores_by_region[region.get_region_number()] = [(acc, (score, processed[acc].regions[0])) for acc, score in ranking]  # TODO handle multiple regions in a ref record
         hits_by_region[region.get_region_number()] = best_hits_for_region
 
-    return VariantResults("PC_TO_ALL", scores_by_region, scores_by_protocluster, hits_by_region)
+    return VariantResults(name, scores_by_region, scores_by_protocluster, hits_by_region)
+
+
+def run_ALL_TO_ALL(record: Record, ref_data, processed, by_reference: HitsByReference, name: str, order: Callable, component: Callable) -> VariantResults:
+    scores_by_region = {}  # type: ScoresByRegion
+    scores_by_protocluster = {}
+    hits_by_region = {}
+
+    for region in record.get_regions():
+        hits_for_region = filter_by_area(region, by_reference)
+        best_hits_for_region = {ref: trim_to_best_hit(hits) for ref, hits in hits_for_region.items()}
+        if not best_hits_for_region:
+            continue
+        scores_within_region = defaultdict(list)  # type: ScoresByProtocluster
+        scores = {accession: ReferenceScorer(accession, ref_data[accession], trim_to_best_hit(hits), processed[accession], region.cds_children,
+                                             calculate_identity_score, order, component)
+                  for accession, hits in hits_for_region.items()}
+        if not scores:
+            continue
+        max_id = max(1, max(score.raw_identity for score in scores.values()))
+        for score in scores.values():
+            assert score.raw_identity <= max_id
+            score.calc_identity(max_id)
+        scores_by_protocluster[-1] = scores  # TODO: how to handle?
+        scores_within_region[region.get_region_number()].extend(scores.items())
+
+        # rank the results for a region differently
+        region_ranking = defaultdict(float)  # type: Dict[str, float]
+        for ref_accession, score in scores_within_region[region.get_region_number()]:
+            region_ranking[ref_accession] += score.final_score
+        ranking = sorted(region_ranking.items(), key=lambda x: x[1], reverse=True)
+        scores_by_region[region.get_region_number()] = [(acc, (score, processed[acc].regions[0])) for acc, score in ranking]  # TODO handle multiple regions in a ref record
+        hits_by_region[region.get_region_number()] = best_hits_for_region
+
+    return VariantResults(name, scores_by_region, scores_by_protocluster, hits_by_region)
+
+
+def run_PC_TO_PC(record: Record, ref_data, processed: Dict[str, RawRecord], by_reference: HitsByReference, name: str, order: Callable, component: Callable) -> VariantResults:
+    scores_by_region = {}  # type: ScoresByRegion
+    scores_by_protocluster = defaultdict(dict)  # type: Dict[int, Dict[Tuple[str, str, RawProtocluster], Dict[str, ReferenceScorer]]]
+    hits_by_region = {}
+
+    by_ref_proto = chunk_into_protoclusters(processed, by_reference)
+
+    for region in record.get_regions():
+        hits_for_region = filter_by_area(region, by_ref_proto)
+        best_hits_for_region = {ref: trim_to_best_hit(hits) for ref, hits in hits_for_region.items()}
+        if not best_hits_for_region:
+            continue
+        scores_within_region = defaultdict(list)  # type: ScoresByProtocluster
+        for protocluster in region.get_unique_protoclusters():
+            hits_for_protocluster = filter_by_area(protocluster, hits_for_region)
+            if not hits_for_protocluster:
+                continue
+            for ref_region_and_proto, hits in hits_for_region.items():
+                ref_record, ref_region, proto = ref_region_and_proto
+                fake_ref = fake_record_for_proto(ref_data[ref_record], ref_region, proto)
+                
+                scores = {accession: ReferenceScorer(accession, fake_ref, trim_to_best_hit(hits), processed[ref_record], protocluster.cds_children,
+                                                     calculate_identity_score, order, component, area_limit=(proto.start, proto.end))
+                          for accession, hits in hits_for_protocluster.items()}
+                max_id = max(1, max(score.raw_identity for score in scores.values()))
+                for score in scores.values():
+                    assert score.raw_identity <= max_id
+                    score.calc_identity(max_id)
+                scores_by_protocluster[protocluster.get_protocluster_number()][ref_region_and_proto] = scores
+                scores_within_region[region.get_region_number()].extend(scores.items())
+
+        # rank the results for a region differently
+        region_ranking = defaultdict(float)  # type: Dict[str, float]
+        # TODO: change to rank on totals for a given ref
+        for ref_accession, score in scores_within_region[region.get_region_number()]:
+            region_ranking[ref_accession] += score.final_score
+        ranking = sorted(region_ranking.items(), key=lambda x: x[1], reverse=True)
+        scores_by_region[region.get_region_number()] = [(acc, (score, acc[1])) for acc, score in ranking]  # TODO handle multiple regions in a ref record
+        hits_by_region[region.get_region_number()] = best_hits_for_region
+
+    return VariantResults(name, scores_by_region, scores_by_protocluster, hits_by_region)
+
+
+def fake_record_for_proto(ref_data: Dict[str, Any], ref_region: RawRegion, proto: RawProtocluster) -> Dict[str, Any]:
+    result = dict(ref_data)
+    for region in ref_data["regions"]:
+        if region["start"] == ref_region.start:
+            result["regions"] = [dict(region)]
+            break
+    for ref_proto in result["regions"][0]["protoclusters"]:
+        if ref_proto["location"] == proto._location:
+            result["regions"][0]["protoclusters"] = [dict(ref_proto)]
+            break
+    return result
+
+
+def chunk_into_protoclusters(processed: Dict[str, RawRecord], hits_by_ref_region: HitsByReference) -> Dict[Tuple[str, str, RawProtocluster], Dict[str, List[Hit]]]:
+    results = defaultdict(dict)  # type: Dict[Tuple[str, RawProtocluster], Dict[str, List[Hit]]]
+
+    # TODO: fix horrific performance
+
+    for record_accession, hits_by_ref_cds in hits_by_ref_region.items():
+        ref_region = processed[record_accession].regions[0]  # TODO
+        assert ref_region.protoclusters, "ref_region has no protoclusters %s" % ref_region.protoclusters
+        for ref_cds_id, hits in hits_by_ref_cds.items():
+            ref_cds = ref_region.cdses[ref_region.cds_mapping[ref_cds_id]]
+            if ref_region.cds_mapping[ref_cds_id] == "NBC-00162_2_00115":
+                import logging; logging.critical("%s %s %s %s", ref_cds, proto.start, proto.end, ref_cds.overlaps_with(proto.start, proto.end))
+            loc = location_from_string(ref_cds.location)
+            for proto in ref_region.protoclusters:
+                if ref_cds.overlaps_with(proto.start, proto.end):
+                    results[(record_accession, ref_region, proto)][ref_cds_id] = hits
+    return results
 
 
 def run(record: Record) -> ClusterCompareResults:
@@ -112,7 +225,18 @@ def run(record: Record) -> ClusterCompareResults:
     processed = load_data(path.get_full_path(__file__, "data", "data.json"))
     _, by_reference = find_diamond_matches(record, path.get_full_path(__file__, "data", "proteins.dmnd"))
 
-    results.add_variant_results(run_PC_TO_ALL(record, ref_data, processed, by_reference))
+    results.add_variant_results(run_ALL_TO_ALL(record, ref_data, processed, by_reference, "ALL_TO_ALL_best", calculate_order_score, calculate_component_score))
+    results.add_variant_results(run_ALL_TO_ALL(record, ref_data, processed, by_reference, "ALL_TO_ALL_QiR", calculate_order_score_query_in_ref, calculate_component_score_query_in_ref))
+    results.add_variant_results(run_ALL_TO_ALL(record, ref_data, processed, by_reference, "ALL_TO_ALL_RiQ", calculate_order_score_ref_in_query, calculate_component_score_ref_in_query))
+
+    results.add_variant_results(run_PC_TO_ALL(record, ref_data, processed, by_reference, "PC_TO_ALL_best", calculate_order_score, calculate_component_score))
+    results.add_variant_results(run_PC_TO_ALL(record, ref_data, processed, by_reference, "PC_TO_ALL_QiR", calculate_order_score_query_in_ref, calculate_component_score_query_in_ref))
+    results.add_variant_results(run_PC_TO_ALL(record, ref_data, processed, by_reference, "PC_TO_ALL_RiQ", calculate_order_score_ref_in_query, calculate_component_score_ref_in_query))
+
+    results.add_variant_results(run_PC_TO_PC(record, ref_data, processed, by_reference, "PC_TO_PC_best", calculate_order_score, calculate_component_score))
+#    results.add_variant_results(run_PC_TO_PC(record, ref_data, processed, by_reference, "PC_TO_PC_QiR", calculate_order_score_query_in_ref, calculate_component_score_query_in_ref))
+#    results.add_variant_results(run_PC_TO_PC(record, ref_data, processed, by_reference, "PC_TO_PC_RiQ", calculate_order_score_ref_in_query, calculate_component_score_ref_in_query))
+
     return results
 
 
@@ -150,8 +274,7 @@ def trim_to_best_hit(hits_by_reference_gene: Dict[str, List[Hit]]) -> Dict[str, 
     return mapping
 
 
-def find_diamond_matches(record: Record, database: str) -> Tuple[Dict[CDSFeature, Dict[str, List[Hit]]],
-                                                                 Dict[str, Dict[str, List[Hit]]]]:
+def find_diamond_matches(record: Record, database: str) -> Tuple[HitsByCDS, HitsByReference]:
     """ Runs diamond, comparing all features in the given regions to the given database
 
         Arguments:
@@ -188,6 +311,7 @@ def blast_parse(diamond_output: str, inputs_to_features: Dict[int, CDSFeature],
 
         Arguments:
             diamond_output: the output from diamond in blast format
+            inputs_to_features: a mapping of integer used in fasta supplied to diamond to original CDS feature
             min_seq_coverage: the exclusive lower bound of sequence coverage for a match
             min_perc_identity: the exclusive lower bound of identity similarity for a match
 

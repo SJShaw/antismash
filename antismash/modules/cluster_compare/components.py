@@ -10,8 +10,8 @@ from typing import (
 )
 
 from antismash.common.secmet import CDSFeature
+from antismash.common.secmet.locations import location_from_string
 from antismash.common.secmet.qualifiers.gene_functions import GeneFunction
-
 
 SubComponents = Dict[Any, int]
 
@@ -37,32 +37,34 @@ class Components:
         return "\n".join(parts)
 
 
-def calculate_component_score(area_features: Sequence[CDSFeature], ref_data: Dict[str, Any], loud: bool = False) -> float:
-    ref = gather_reference_components(ref_data["regions"][0])  # TODO should be handled further up
+def calculate_component_score_ref_in_query(area_features: Sequence[CDSFeature], ref_data: Dict[str, Any], limit_to_area: Tuple[int, int] = None) -> float:
+    return calculate_component_score(area_features, ref_data, ref_in_query=True, limit_to_area=limit_to_area)
+
+
+def calculate_component_score_query_in_ref(area_features: Sequence[CDSFeature], ref_data: Dict[str, Any], limit_to_area: Tuple[int, int] = None) -> float:
+    return calculate_component_score(area_features, ref_data, query_in_ref=True, limit_to_area=limit_to_area)
+
+
+def calculate_component_score(area_features: Sequence[CDSFeature], ref_data: Dict[str, Any], ref_in_query: bool = False, query_in_ref: bool = False, limit_to_area: Tuple[int, int] = None) -> float:
+    assert not (ref_in_query and query_in_ref)
+    if limit_to_area:
+        assert limit_to_area[0] < limit_to_area[1]
+    # TODO properly handle multiple regions
+    ref = gather_reference_components(ref_data["regions"][0], limit_to_area=limit_to_area)  # TODO should be handled further up
     # TODO don't repeat the query gather here, do it once per area
     query = gather_query_components(area_features)
-    return compare(ref, query, loud=loud)
+    return compare(ref, query, ref_in_query, query_in_ref)
 
 
-def compare(ref: Components, query: Components, loud: bool = False) -> float:
-    nrps = compare_modules(ref.nrps, query.nrps)
-    if loud:
-        print("nrps", nrps)
-    pks = compare_modules(ref.pks, query.pks, loud)
-    if loud:
-        print("pks", pks)
-    secmet = compare_combos(ref.secmet, query.secmet)
-    if loud:
-        print("secmet", secmet)
-    functions = compare_combos(ref.functions, query.functions)  # TODO: skip if a minimal run? smcogs missing will cause scores to plummet
-    if loud:
-        print("functions", functions)
+def compare(ref: Components, query: Components, ref_in_query: bool = False, query_in_ref: bool = False) -> float:
+    nrps = compare_modules(ref.nrps, query.nrps, ref_in_query, query_in_ref)
+    pks = compare_modules(ref.pks, query.pks, ref_in_query, query_in_ref)
+    secmet = compare_combos(ref.secmet, query.secmet, ref_in_query, query_in_ref)
+    functions = compare_combos(ref.functions, query.functions, ref_in_query, query_in_ref)  # TODO: skip if a minimal run? smcogs missing will cause scores to plummet
     max_modules = sum(ref.pks.values()) + sum(ref.nrps.values())
     modules = 1.
     if max_modules:
         nrps_weighting = sum(ref.nrps.values()) / max_modules
-        if loud:
-            print(nrps, "*", nrps_weighting, "+", pks, "*", (1-nrps_weighting))
         if 0.001 <= nrps_weighting <= 0.999:
             modules = (nrps * nrps_weighting + pks * (1-nrps_weighting)) / 2
         elif nrps_weighting >= 0.999:
@@ -77,20 +79,22 @@ def compare(ref: Components, query: Components, loud: bool = False) -> float:
     return (secmet + functions) / 2
 
 
-def compare_combos(ref: SubComponents, query: SubComponents, loud: bool = False) -> float:
+def compare_combos(ref: SubComponents, query: SubComponents, ref_in_query: bool = False, query_in_ref: bool = False) -> float:
     if not ref:
         return 1.
     if not query:
         return 0.  # TODO bidirectional, maybe
-    if loud:
-        print("ref", ref)
-        print("query", query)
     ref_combos = set(ref)
     query_combos = set(query)
     ref_extra = ref_combos.difference(query_combos)
     query_extra = query_combos.difference(ref_combos)
 
-    max_possible = min(sum(query.values()), sum(ref.values()))  # TODO directionality would be good to have
+    if ref_in_query:
+        max_possible = sum(query.values())
+    elif query_in_ref:
+        max_possible = sum(ref.values())
+    else:
+        max_possible = min(sum(query.values()), sum(ref.values()))  # TODO directionality would be good to have
 
     assert max_possible
 
@@ -100,43 +104,60 @@ def compare_combos(ref: SubComponents, query: SubComponents, loud: bool = False)
     return min(found / max_possible, 1.)
 
 
-def compare_modules(ref: SubComponents, query: SubComponents, loud: bool = False) -> float:
+def compare_modules(ref: SubComponents, query: SubComponents, ref_in_query: bool = False, query_in_ref: bool = False) -> float:
     if not ref:
+        if ref_in_query:
+            return 0.
         return 1.
     if not query:
+        if ref_in_query:
+            return 1.
         return 0.  # TODO bidirectional, maybe
-    if loud:
-        print("ref", ref)
-        print("query", query)
     ref_combos = set(ref)
     query_combos = set(query)
     ref_extra = ref_combos.difference(query_combos)
     query_extra = query_combos.difference(ref_combos)
 
-    max_possible = max(sum(query.values()), sum(ref.values()))  # TODO directionality would be good to have
-
-    assert max_possible
-
-    found = 0.
-    for combo in ref_combos.intersection(query_combos):
-        found += query[combo]
-
-    # if they're different, but still complete, then count them as half
-    # as having the same number of modules is still useful even if the
+    # TODO: consider if the modules are different, but still complete, then count them as 0.5
+    # since having the same number of modules is still useful even if the
     # modification domains don't exactly match
     # TODO: handle trans-AT specifically, as it's very different
-    found += min(0, len(ref_extra - query_extra)) / 2
 
-    return found / max_possible
+    found = 0.
+    if ref_in_query:
+        max_possible = sum(ref.values())
+        for combo, count in ref.items():
+            found += query.get(combo, 0)
+    elif query_in_ref:
+        max_possible = sum(query.values())
+        for combo, count in query.items():
+            found += ref.get(combo, 0)
+    else:
+        max_possible = min(sum(query.values()), sum(ref.values()))
+        for combo in ref_combos.intersection(query_combos):
+            found += query[combo]
+
+    assert max_possible
+    found = min(found, max_possible)
+    result = found / max_possible
+
+    assert 0 <= result <= 1, result
+    return result
 
 
-def gather_reference_components(ref_data: Dict[str, Any]) -> Components:
+def gather_reference_components(ref_data: Dict[str, Any], limit_to_area: Tuple[int, int] = None) -> Components:
     nrps = defaultdict(int)  # type: SubComponents
     pks = defaultdict(int)  # type: SubComponents
     secmet = defaultdict(int)  # type: SubComponents
     functions = defaultdict(int)  # type: SubComponents
 
     for cds in ref_data["cdses"].values():
+        if limit_to_area:
+            # TODO calculate elsewhere and make performant
+            loc = location_from_string(cds["location"])
+            if not (loc.end > limit_to_area[0] and loc.start < limit_to_area[1]):
+                continue
+
         if cds["function"] != "other":
             functions[cds["function"]] += 1
 

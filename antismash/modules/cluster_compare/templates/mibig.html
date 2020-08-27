@@ -1,23 +1,28 @@
-<div class = "cluster-compare-known">
+<div class="{{tag}}">
     <div class="heading">
       <span>Similar known gene clusters</span>
-      {{help_tooltip(tooltip, "cluster-compare-known")}}
+      {{help_tooltip(tooltip, tag)}}
     </div>
   {% if results %}
-  <div id="cb-comparison-container-{{region.anchor_id}}"></div>
+  <div id="cb-comparison-container-{{region.anchor_id}}-{{tag}}"></div>
   <table class="cb-heat-table">
     <tr>
-     <th>MiBIG id</th>
-     {% for proto in region.get_unique_protoclusters() %}
-     <th><span class="cb-heat-product">{{proto.product}}</span></th>
-     {% endfor %}
+     <th>Reference</th>
+     {% if -1 not in proto_results %}
+         {% for proto in region.get_unique_protoclusters() %}
+         <th><span class="cb-heat-product">{{proto.product}}</span></th>
+         {% endfor %}
+     {% else %}
+         <th><span class="cb-heat-product">All</span></th>
+     {% endif %}
      <th>Similarity score</th>
      <th>Type</th>
      <th>Compound(s)</th>
     </tr>
     {% for ref, totalscore_ref in results %}
         <tr class="cb-heat-row" data-accession="{{ref}}">
-        <td><a href="https://mibig.secondarymetabolites.org/go/{{ref.rsplit('.', 1)[0]}}/1">{{ref}}</a></td>
+        <td><a href="missing ref URL setup">{{ref}}</a></td>
+        {% if -1 not in proto_results %}
         {% for proto in region.get_unique_protoclusters() %}
          {% if proto_results.get(proto.get_protocluster_number(), {}).get(ref) %}
           {% set score = proto_results[proto.get_protocluster_number()][ref] %}
@@ -28,6 +33,16 @@
         <td class="cb-heat-cell" title="no hits" style="background-image: linear-gradient(to top, rgb(0, 0, 0, 0%), rgb(0, 0, 0, 0%) 0%, white 0%)"></td>
          {% endif %}
         {% endfor %}
+        {% else %}
+          {% if proto_results.get(-1, {}).get(ref) %}
+          {% set score = proto_results[-1][ref] %}
+          {% set perc = "{:.0f}".format(score.final_score*100) %}
+          {% set colour = "rgb(0, 0, 0, {:.2f})".format(score.final_score) %}
+        <td class="cb-heat-cell" title="{{score.table_string()}}" style="background-image: linear-gradient(to top, {{colour}}, {{colour}} {{perc}}%, white {{perc}}%)"></td>
+         {% else %}
+        <td class="cb-heat-cell" title="no hits" style="background-image: linear-gradient(to top, rgb(0, 0, 0, 0%), rgb(0, 0, 0, 0%) 0%, white 0%)"></td>
+         {% endif %}
+        {% endif %}
         <td>{{"{:.2f}".format(totalscore_ref[0])}}</td>
         <td>{{totalscore_ref[1].product_string}}</td>
         <td>{{"missing description"}}</td>

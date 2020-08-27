@@ -34,23 +34,46 @@ def generate_html(region_layer: RegionLayer, results: ClusterCompareResults,
     # TODO adjust tooltip by variant
     tooltip = base_tooltip % "clusters from the MiBIG database"
     tooltip += "<br>Click on an accession to open that entry in the MiBIG database."
-    for variant, result in results.get_all_variants().items():
-        scores = result.scores_by_region.get(region_layer.get_region_number(), [])[:10]
-        div = generate_div(region_layer, record_layer, options_layer, "mibig", tooltip, scores, result.scores_by_protocluster)
+    for variant, result in sorted(results.get_all_variants().items()):
+        scores = result.scores_by_region.get(region_layer.get_region_number(), [])[:10]  # TODO: make limit customisable
         tag = "%s-cluster-compare" % (variant.replace(" ", "-"))
+        search_type = "mibig"  # TODO: fix this for only known variants
+        if "PC_TO_PC" in variant:
+            search_type = "matrix"
+        div = generate_div(tag, region_layer, record_layer, options_layer, search_type, tooltip, scores, result.scores_by_protocluster)
         html.add_detail_section(tag, div, tag)
 
     return html
 
 
-def generate_div(region_layer: RegionLayer, record_layer: RecordLayer,
+class Row:
+    class SubRow:
+        def __init__(self, ref_product, scores_per_proto):
+            self.product = ref_product
+            self.scores_per_proto = scores_per_proto
+
+    def __init__(self, accession, reg, pro, scorer, proto_results, region):
+        self.accession = accession
+        self.subrows = []
+        assert not scorer, type(scorer)
+
+
+def generate_div(tag: str, region_layer: RegionLayer, record_layer: RecordLayer,
                  options_layer: OptionsLayer, search_type: str,
-                 tooltip: str, results: str, proto_results) -> Markup:  # TODO fix typing
+                 tooltip: str, results: List[Any], proto_results: Dict[int, Dict[Any, Dict[Any, Any]]]) -> Markup:  # TODO fix typing
     """ Generates the specific HTML section of the body for a given variant of
         clusterblast
     """
+    large_rows = []
+    if search_type == "matrix":
+        for proto_number, results in proto_results.items():
+            for acc_reg_pro, scorer_dict in results.items():
+                import logging; logging.critical(acc_reg_pro); logging.critical(" == "); logging.critical(scorer_dict)
+                acc, reg, pro = acc_reg_pro
+                import logging; logging.critical(scorer_dict)
+                large_rows.append(Row(acc, reg, pro, scorer_dict, proto_results, region_layer))
     template = FileTemplate(path.get_full_path(__file__, "templates", "%s.html" % search_type))
-    return template.render(record=record_layer, region=region_layer, options=options_layer, tooltip=tooltip, results=results, proto_results=proto_results)
+    return template.render(tag=tag, record=record_layer, region=region_layer, options=options_layer, tooltip=tooltip, results=results, proto_results=proto_results, large_rows=large_rows)
 
 
 def generate_javascript_data(record: Record, region: Region, results: ClusterCompareResults) -> Dict[str, Any]:
@@ -59,7 +82,7 @@ def generate_javascript_data(record: Record, region: Region, results: ClusterCom
     for variant, result in results.get_all_variants().items():
         variant_data = {
             "reference_clusters": {}
-        }
+        }  # type: Dict[str, Dict[str, Any]]
 
         scores = result.scores_by_region.get(region.get_region_number(), [])[:10]
         if not scores:
@@ -82,6 +105,8 @@ def generate_javascript_data(record: Record, region: Region, results: ClusterCom
                 "start": ref.start,
                 "end": ref.end,
             }
+            if not isinstance(accession, str):
+                accession = "%s: %s-%s (%s)" % (accession[0], accession[1].start, accession[1].end, accession[2].product)
             variant_data["reference_clusters"][accession] = ref_entry
 
             mismatching_strands = 0
