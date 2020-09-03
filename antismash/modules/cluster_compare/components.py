@@ -38,20 +38,18 @@ class Components:
         return "\n".join(parts)
 
 
-def calculate_component_score_ref_in_query(area_features: Sequence[CDSFeature], reference: ReferenceArea) -> float:
-    return calculate_component_score(area_features, reference, ref_in_query=True)
+def calculate_component_score_ref_in_query(query_components: Components, reference: ReferenceArea) -> float:
+    return calculate_component_score(query_components, reference, ref_in_query=True)
 
 
-def calculate_component_score_query_in_ref(area_features: Sequence[CDSFeature], reference: ReferenceArea) -> float:
-    return calculate_component_score(area_features, reference, query_in_ref=True)
+def calculate_component_score_query_in_ref(query_components: Components, reference: ReferenceArea) -> float:
+    return calculate_component_score(query_components, reference, query_in_ref=True)
 
 
-def calculate_component_score(area_features: Sequence[CDSFeature], reference: ReferenceArea, ref_in_query: bool = False, query_in_ref: bool = False) -> float:
+def calculate_component_score(query_components: Components, reference: ReferenceArea, ref_in_query: bool = False, query_in_ref: bool = False) -> float:
     assert not (ref_in_query and query_in_ref)
     ref = gather_reference_components(reference)  # TODO should be handled further up
-    # TODO don't repeat the query gather here, do it once per area
-    query = gather_query_components(area_features)
-    return compare(ref, query, ref_in_query, query_in_ref)
+    return compare(ref, query_components, ref_in_query, query_in_ref)
 
 
 def compare(ref: Components, query: Components, ref_in_query: bool = False, query_in_ref: bool = False) -> float:

@@ -143,7 +143,7 @@ def load_data(filename: str) -> Dict[str, ReferenceRecord]:
 
 class ReferenceScorer:
     def __init__(self, best_hits: Dict[str, Hit],
-                 reference: ReferenceArea, query_features: Tuple[CDSFeature, ...],
+                 reference: ReferenceArea, query_features: Tuple[CDSFeature, ...], query_components,
                  ident_calculator: Callable, order_calculator: Callable, component_calculator: Callable) -> None:  # TODO parse data to object
         self.accession = reference.accession
         self.hits_by_gene = best_hits
@@ -159,6 +159,7 @@ class ReferenceScorer:
         self._ident_calculator = ident_calculator
         self._order_calculator = order_calculator
         self._component_calculator = component_calculator
+        self._query_components = query_components
 
     def calc_identity(self, max_id: float) -> float:
         self._max_id = max_id
@@ -191,7 +192,7 @@ class ReferenceScorer:
     @property
     def components(self) -> float:
         if self._components < 0:
-            self._components = self._component_calculator(self._query_features, self.reference)
+            self._components = self._component_calculator(self._query_components, self.reference)
         return self._components
 
     def __repr__(self) -> str:
