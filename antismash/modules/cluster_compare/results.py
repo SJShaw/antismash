@@ -3,16 +3,16 @@
 
 """ Contains the results classes for the nrps_pks module """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from antismash.common.module_results import ModuleResults
 from antismash.common.secmet import Record
 
-from .data_structures import ScoresByRegion, ScoresByProtocluster, Hit
+from .data_structures import ScoresByRegion, ScoresByProtocluster, Hit, HitsByReference, ReferenceScorer
 
 
 class VariantResults:
-    def __init__(self, variant_name: str, scores_by_region: ScoresByRegion, scores_by_protocluster: ScoresByProtocluster, hits_by_region: Dict[int, Dict[str, Dict[str, Hit]]]) -> None:
+    def __init__(self, variant_name: str, scores_by_region: ScoresByRegion, scores_by_protocluster: Union[ScoresByProtocluster, List[ReferenceScorer]], hits_by_region: HitsByReference) -> None:
         assert variant_name
         self.variant_name = variant_name
         self.scores_by_region = scores_by_region
@@ -24,21 +24,21 @@ class ClusterCompareResults(ModuleResults):
     """ The results of cluster comparison """
     _schema_version = 1
 
-    def __init__(self, record_id: str) -> None:
+    def __init__(self, record_id: str, results_by_region: Dict[int, Dict[str, VariantResults]]) -> None:
         super().__init__(record_id)
-        self._variants = {}  # type: Dict[str, VariantResults]
+        self.results_by_region = results_by_region
 
-    def add_variant_results(self, result: VariantResults) -> None:
-        variant = result.variant_name
-        if variant in self._variants:
-            raise ValueError("Results for %s already exist" % variant)
-        self._variants[variant] = result
+#    def add_variant_results(self, result: VariantResults) -> None:
+#        variant = result.variant_name
+#        if variant in self._variants:
+#            raise ValueError("Results for %s already exist" % variant)
+#        self._variants[variant] = result
 
-    def get_variant_results(self, variant: str) -> VariantResults:
-        return self._variants[variant]
+#    def get_variant_results(self, variant: str) -> VariantResults:
+#        return self._variants[variant]
 
-    def get_all_variants(self) -> Dict[str, VariantResults]:
-        return dict(self._variants)  # TODO: make more resilient
+#    def get_all_variants(self) -> Dict[str, VariantResults]:
+#        return dict(self._variants)  # TODO: make more resilient
 
     def to_json(self) -> Dict[str, Any]:
         return {}  # TODO

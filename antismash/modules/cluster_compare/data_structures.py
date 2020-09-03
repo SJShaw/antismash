@@ -7,13 +7,13 @@ import json
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from antismash.common.secmet import CDSFeature
-from antismash.common.secmet.locations import location_from_string
+from antismash.common.secmet.locations import location_from_string, Location
 
 
 class Hit:
-    def __init__(self, reference_cluster: str, reference_id: str, cds: CDSFeature,
+    def __init__(self, reference_record: str, reference_id: str, cds: CDSFeature,
                  percent_identity: int, blast_score: int, percent_coverage: float, evalue: float) -> None:
-        self.reference_cluster = reference_cluster  # TODO actually reference record, need to split into regions/protoclusters
+        self.reference_record = reference_record
         self.reference_id = reference_id
         self.cds = cds
         self.percent_identity = percent_identity
@@ -29,172 +29,136 @@ class Hit:
         return "%s->%s(pid=%d,cov%d)" % (self.cds.get_name(), self.reference_id, self.percent_identity, self.percent_coverage)
 
 
-class RawCDS:
-    def __init__(self, name: str, function: str, components: Dict[str, List[Any]], location: str) -> None:
+class ReferenceCDS:
+    def __init__(self, name: str, function: str, components: Dict[str, List[Any]], location: Location) -> None:
         self.name = name
         self.function = function
         self.components = components
         self.location = location
-        self._start = None  # type: Optional[int]
-        self._end = None  # type: Optional[int]
 
-    def overlaps_with(self, area_start: int, area_end: int) -> bool:
-        if self._start is None or self._end is None:
-            loc = location_from_string(self.location)
-            self._start = loc.start
-            self._end = loc.end
-        return self._end > area_start and self._start < area_end
+    def overlaps_with(self, area: "ReferenceArea") -> bool:
+        return self.location.end > area.start and self.location.start < area.end
 
     @classmethod
-    def from_json(cls, name: str, data: Dict[str, Any]) -> "RawCDS":
-        return cls(name, data["function"], data["components"], data["location"])
-
-    def __lt__(self, other: "RawCDS") -> bool:
-        if not isinstance(other, RawCDS):
-            raise TypeError("Cannot compare RawCDS to %s" % type(other))
-        return self._start < other._start
+    def from_json(cls, name: str, data: Dict[str, Any]) -> "ReferenceCDS":
+        return cls(name, data["function"], data["components"], location_from_string(data["location"]))
 
     def __str__(self) -> str:
-        return "RawCDS(%s, %s)" % (self.name, self.location)
+        return "ReferenceCDS(%s, %s)" % (self.name, self.location)
+
+    def get_minimal_json(self) -> Dict[str, Any]:
+        # to match IOrf in antismash-js for the purposes of drawing
+        return {
+            "locus_tag": self.name,
+            "start": self.location.start,
+            "end": self.location.end,
+            "strand": self.location.strand,
+            "function": self.function,
+        }
 
 
-class RawProtocluster:
-    def __init__(self, cores: List[RawCDS], product: str, location: str) -> None:
+class ReferenceArea:
+    def __init__(self, accession: str, start: int, end: int, cds_mapping: Dict[str, str], cdses: Dict[str, ReferenceCDS], products: List[str]) -> None:
+        self.accession = accession
+        self.start = start
+        self.end = end
+        self.cds_mapping = cds_mapping
+        self.cdses = {name: cds for name, cds in cdses.items() if cds.overlaps_with(self)}
+        self.products = products
+
+    def get_product_string(self) -> str:
+        return ", ".join(self.products)
+
+    def get_identifier(self) -> str:
+        return "%s (%s-%s)" % (self.accession, self.start, self.end)
+
+
+class ReferenceProtocluster(ReferenceArea):
+    def __init__(self, accession: str, start: int, end: int, cds_mapping: Dict[str, str], cdses: Dict[str, ReferenceCDS], cores: List[ReferenceCDS], product: str) -> None:
+        super().__init__(accession, start, end, cds_mapping, cdses, [product])
         self.cores = cores
         self.product = product
-        self._location = location
-        self._start = None  # type: Optional[int]
-        self._end = None  # type: Optional[int]
-
-    @property
-    def start(self) -> int:
-        if self._start is None:
-            loc = location_from_string(self._location)  # TODO: don't even store biopython locs for protoclusters
-            self._start = loc.start
-            self._end = loc.end
-        return self._start
-
-    @property
-    def end(self) -> int:
-        if self._end is None:
-            loc = location_from_string(self._location)  # TODO: don't even store biopython locs for protoclusters
-            self._start = loc.start
-            self._end = loc.end
-        return self._end
 
     @classmethod
-    def from_json(cls, data: Dict[str, Any], cdses: Dict[str, RawCDS]) -> "RawProtocluster":
+    def from_json(cls, accession: str, data: Dict[str, Any], cdses: Dict[str, ReferenceCDS], cds_mapping: Dict[str, str]) -> "ReferenceProtocluster":
         cores = [cdses[core] for core in data["core_cdses"]]
-        return cls(cores, data["product"], data["location"])
+        location = location_from_string(data["location"])  # TODO: this is silly
+        return cls(accession, location.start, location.end, cds_mapping, cdses, cores, data["product"])
 
     def __str__(self) -> str:
-        return "RawProtocluster(%s, %s, %s...)" % (self.start, self.end, self.product)
+        return "ReferenceProtocluster(%s, %s, %s...)" % (self.start, self.end, self.product)
 
     def __repr__(self) -> str:
         return str(self)
 
 
-class RawRegion:
-    def __init__(self, protoclusters: List[RawProtocluster], cdses: Dict[str, RawCDS],
-                 products: List[str], cds_mapping: Dict[int, str], raw_cdses: Dict[str, Any], start: int, end: int) -> None:
+class ReferenceRegion(ReferenceArea):
+    def __init__(self, accession: str, start: int, end: int, protoclusters: List[ReferenceProtocluster], cdses: Dict[str, ReferenceCDS],
+                 products: List[str], cds_mapping: Dict[str, str]) -> None:
+        super().__init__(accession, start, end, cds_mapping, cdses, products)
         self.protoclusters = protoclusters
-        self.cdses = cdses
-        self.products = products
-        self.cds_mapping = cds_mapping
-        self.raw_cdses = raw_cdses
-        self.start = start
-        self.end = end
 
     @classmethod
-    def from_json(cls, data: Dict[str, Any], cds_mapping: Dict[int, str]) -> "RawRegion":
-        cdses = {name: RawCDS.from_json(name, cds) for name, cds in data["cdses"].items()}
+    def from_json(cls, accession: str, data: Dict[str, Any], cds_mapping: Dict[str, str]) -> "ReferenceRegion":
+        cdses = {name: ReferenceCDS.from_json(name, cds) for name, cds in data["cdses"].items()}
 
-        return cls([RawProtocluster.from_json(proto, cdses) for proto in data["protoclusters"]],
-                   cdses,
-                   data["products"],
-                   cds_mapping,
-                   data["cdses"],
-                   data["start"],
-                   data["end"],
-                   )
+        return cls(
+            accession,
+            data["start"],
+            data["end"],
+            [ReferenceProtocluster.from_json(accession, proto, cdses, cds_mapping) for proto in data["protoclusters"]],
+            cdses,
+            data["products"],
+            cds_mapping,
+        )
 
     @property
     def product_string(self) -> str:
         return ", ".join(self.products)
 
-    def get_cds_json(self) -> Dict[str, Any]:
-        return self.raw_cdses
-
     def __str__(self) -> str:
-        return "RawRegion(%s, %s, %s...)" % (self.start, self.end, self.products)
+        return "ReferenceRegion(%s, %s, %s, %s...)" % (self.accession, self.start, self.end, self.products)
 
     def __repr__(self) -> str:
         return str(self)
 
-class RawRecord:
-    def __init__(self, accession: str, regions: List[RawRegion], cds_mapping: Dict[int, str]) -> None:
+
+class ReferenceRecord:
+    def __init__(self, accession: str, regions: List[ReferenceRegion], cds_mapping: Dict[str, str]) -> None:
         self.accession = accession
         self.regions = regions
         self.cds_mapping = cds_mapping
 
     @classmethod
-    def from_json(cls, accession: str, data: Dict[str, Any]) -> "RawRecord":
-        regions = [RawRegion.from_json(region, data["cds_mapping"]) for region in data["regions"]]
-        return RawRecord(accession, regions, data["cds_mapping"])
+    def from_json(cls, accession: str, data: Dict[str, Any]) -> "ReferenceRecord":
+        regions = [ReferenceRegion.from_json(accession, region, data["cds_mapping"]) for region in data["regions"]]
+        return ReferenceRecord(accession, regions, data["cds_mapping"])
 
 
-def load_data(filename: str) -> Dict[str, RawRecord]:
+def load_data(filename: str) -> Dict[str, ReferenceRecord]:
     with open(filename) as handle:
         raw = json.loads(handle.read())
-    return {accession: RawRecord.from_json(accession, record) for accession, record in raw.items()}
-
-
-class ReferenceGene:
-    """ A reference gene referred to/contained by ReferenceAreas """
-    __slots__ = ["name", "location"]
-
-    def __init__(self, name: str, location: str) -> None:
-        self.name = name
-        self.location = location
-
-
-class ReferenceArea:
-    """ A reference cluster container, as read from a database of
-        antismash-predicted areas.
-    """
-    __slots__ = ["accession", "location", "gene_names", "description", "kind"]
-
-    def __init__(self, accession: str, location: str, gene_names: List[str],
-                 description: str, kind: str) -> None:
-        self.accession = accession
-        self.location = location
-        self.gene_names = gene_names
-        self.description = description
-        self.kind = kind
-
-    def get_name(self) -> str:
-        return "%s_%s" % (self.accession, self.location)
+    return {accession: ReferenceRecord.from_json(accession, record) for accession, record in raw.items()}
 
 
 class ReferenceScorer:
-    def __init__(self, accession: str, data: Dict[str, Any], best_hits: Dict[str, Hit],
-                 reference: RawRecord, area_features: Tuple[CDSFeature, ...],
-                 ident_calculator: Callable, order_calculator: Callable, component_calculator: Callable,
-                 area_limit: Tuple[int, int] = None) -> None:  # TODO parse data to object
-        self.accession = accession
-        self.data = data
+    def __init__(self, best_hits: Dict[str, Hit],
+                 reference: ReferenceArea, query_features: Tuple[CDSFeature, ...],
+                 ident_calculator: Callable, order_calculator: Callable, component_calculator: Callable) -> None:  # TODO parse data to object
+        self.accession = reference.accession
         self.hits_by_gene = best_hits
+        for hit in best_hits.values():
+            assert hit.reference_record == reference.accession, "%s != %s" % (hit.reference_record, reference.accession)
         self._identity = -1.
         self._order = -1.
         self._components = -1.
-        self.reference = reference.regions[0]  # TODO
+        self.reference = reference
         self._raw_identity = -1.
         self._max_id = -1.
-        self._area_features = area_features
+        self._query_features = query_features
         self._ident_calculator = ident_calculator
         self._order_calculator = order_calculator
         self._component_calculator = component_calculator
-        self._area_limit = area_limit
 
     def calc_identity(self, max_id: float) -> float:
         self._max_id = max_id
@@ -221,13 +185,13 @@ class ReferenceScorer:
     @property
     def order(self) -> float:
         if self._order < 0:
-            self._order = self._order_calculator(sorted(self._area_features), self.hits_by_gene, self.data, limit_to_area=self._area_limit)
+            self._order = self._order_calculator(sorted(self._query_features), self.hits_by_gene, self.reference)
         return self._order
 
     @property
     def components(self) -> float:
         if self._components < 0:
-            self._components = self._component_calculator(self._area_features, self.data, limit_to_area=self._area_limit)
+            self._components = self._component_calculator(self._query_features, self.reference)
         return self._components
 
     def __repr__(self) -> str:
@@ -242,7 +206,7 @@ class ReferenceScorer:
         )
 
     def table_string(self) -> str:
-        return "ReferenceScorer(%.2f (id:%.2f, order:%.2f, components:%.2f))" % (
+        return "%.2f (id:%.2f, order:%.2f, components:%.2f)" % (
             self.final_score,
             self.identity,
             self.order,
@@ -250,5 +214,6 @@ class ReferenceScorer:
         )
 
 
-ScoresByRegion = Dict[int, List[Tuple[str, Tuple[float, RawRegion]]]]
-ScoresByProtocluster = Dict[int, List[Tuple[str, ReferenceScorer]]]
+HitsByReference = Dict[ReferenceRegion, Dict[str, List[Hit]]]
+ScoresByRegion = List[Tuple[ReferenceArea, float]]
+ScoresByProtocluster = Dict[int, Dict[ReferenceArea, ReferenceScorer]]

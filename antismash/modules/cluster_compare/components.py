@@ -10,8 +10,9 @@ from typing import (
 )
 
 from antismash.common.secmet import CDSFeature
-from antismash.common.secmet.locations import location_from_string
 from antismash.common.secmet.qualifiers.gene_functions import GeneFunction
+
+from .data_structures import ReferenceArea
 
 SubComponents = Dict[Any, int]
 
@@ -37,20 +38,17 @@ class Components:
         return "\n".join(parts)
 
 
-def calculate_component_score_ref_in_query(area_features: Sequence[CDSFeature], ref_data: Dict[str, Any], limit_to_area: Tuple[int, int] = None) -> float:
-    return calculate_component_score(area_features, ref_data, ref_in_query=True, limit_to_area=limit_to_area)
+def calculate_component_score_ref_in_query(area_features: Sequence[CDSFeature], reference: ReferenceArea) -> float:
+    return calculate_component_score(area_features, reference, ref_in_query=True)
 
 
-def calculate_component_score_query_in_ref(area_features: Sequence[CDSFeature], ref_data: Dict[str, Any], limit_to_area: Tuple[int, int] = None) -> float:
-    return calculate_component_score(area_features, ref_data, query_in_ref=True, limit_to_area=limit_to_area)
+def calculate_component_score_query_in_ref(area_features: Sequence[CDSFeature], reference: ReferenceArea) -> float:
+    return calculate_component_score(area_features, reference, query_in_ref=True)
 
 
-def calculate_component_score(area_features: Sequence[CDSFeature], ref_data: Dict[str, Any], ref_in_query: bool = False, query_in_ref: bool = False, limit_to_area: Tuple[int, int] = None) -> float:
+def calculate_component_score(area_features: Sequence[CDSFeature], reference: ReferenceArea, ref_in_query: bool = False, query_in_ref: bool = False) -> float:
     assert not (ref_in_query and query_in_ref)
-    if limit_to_area:
-        assert limit_to_area[0] < limit_to_area[1]
-    # TODO properly handle multiple regions
-    ref = gather_reference_components(ref_data["regions"][0], limit_to_area=limit_to_area)  # TODO should be handled further up
+    ref = gather_reference_components(reference)  # TODO should be handled further up
     # TODO don't repeat the query gather here, do it once per area
     query = gather_query_components(area_features)
     return compare(ref, query, ref_in_query, query_in_ref)
@@ -145,27 +143,21 @@ def compare_modules(ref: SubComponents, query: SubComponents, ref_in_query: bool
     return result
 
 
-def gather_reference_components(ref_data: Dict[str, Any], limit_to_area: Tuple[int, int] = None) -> Components:
+def gather_reference_components(reference: ReferenceArea) -> Components:
     nrps = defaultdict(int)  # type: SubComponents
     pks = defaultdict(int)  # type: SubComponents
     secmet = defaultdict(int)  # type: SubComponents
     functions = defaultdict(int)  # type: SubComponents
 
-    for cds in ref_data["cdses"].values():
-        if limit_to_area:
-            # TODO calculate elsewhere and make performant
-            loc = location_from_string(cds["location"])
-            if not (loc.end > limit_to_area[0] and loc.start < limit_to_area[1]):
-                continue
+    for cds in reference.cdses.values():
+        if cds.function != "other":
+            functions[cds.function] += 1
 
-        if cds["function"] != "other":
-            functions[cds["function"]] += 1
-
-        if cds["components"]["secmet"]:
-            for domain in cds["components"]["secmet"]:
+        if cds.components["secmet"]:
+            for domain in cds.components["secmet"]:
                 secmet[domain] += 1
 
-        for module in cds["components"]["modules"]:
+        for module in cds.components["modules"]:
             if not module["complete"]:  # TODO check if incomplete is useful
                 continue
             if module["type"] == "pks":

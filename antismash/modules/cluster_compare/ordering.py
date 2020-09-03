@@ -12,7 +12,7 @@ from typing import (
 from antismash.common.secmet import CDSFeature
 from antismash.common.secmet.locations import location_from_string
 
-from .data_structures import Hit
+from .data_structures import Hit, ReferenceArea, ReferenceCDS
 
 Pairing = Tuple[int, int, bool]
 
@@ -22,23 +22,23 @@ EXTRA_SEGMENT_PENALTY = 0.75  # for multiple disjoint segments
 REVERSED_SEGMENT_PENALTY = 0.9  # for when the strand of a segment doesn't match
 
 
-def calculate_order_score_ref_in_query(area_features: Sequence[CDSFeature], hits: Dict[str, Hit], ref_data: Dict[str, Any], limit_to_area: Tuple[int, int] = None) -> float:
-    return calculate_order_score(area_features, hits, ref_data, ref_in_query=True, limit_to_area=limit_to_area)
+def calculate_order_score_ref_in_query(area_features: Sequence[CDSFeature], hits: Dict[str, Hit], reference: ReferenceArea, limit_to_area: Tuple[int, int] = None) -> float:
+    return calculate_order_score(area_features, hits, reference, ref_in_query=True, limit_to_area=limit_to_area)
 
 
-def calculate_order_score_query_in_ref(area_features: Sequence[CDSFeature], hits: Dict[str, Hit], ref_data: Dict[str, Any], limit_to_area: Tuple[int, int] = None) -> float:
-    return calculate_order_score(area_features, hits, ref_data, query_in_ref=True, limit_to_area=limit_to_area)
+def calculate_order_score_query_in_ref(area_features: Sequence[CDSFeature], hits: Dict[str, Hit], reference: ReferenceArea, limit_to_area: Tuple[int, int] = None) -> float:
+    return calculate_order_score(area_features, hits, reference, query_in_ref=True, limit_to_area=limit_to_area)
 
 
-def calculate_order_score(area_features: Sequence[CDSFeature], hits: Dict[str, Hit], ref_data: Dict[str, Any], ref_in_query: bool = False, query_in_ref: bool = False, limit_to_area: Tuple[int, int] = None) -> float:
+def calculate_order_score(area_features: Sequence[CDSFeature], hits: Dict[str, Hit], reference: ReferenceArea, ref_in_query: bool = False, query_in_ref: bool = False, limit_to_area: Tuple[int, int] = None) -> float:
     if not hits:
         return 0.
     # build lists of reference features and features ordered by location
-    reference_features = ref_data["regions"][0]["cdses"]
+    reference_features = reference.cdses
     if limit_to_area:
-        features_in_area = {}  # type: Dict[str, Dict[str, Any]]
+        features_in_area = {}  # type: Dict[str, ReferenceCDS]
         for name, feature in reference_features.items():
-            loc = location_from_string(feature["location"])
+            loc = feature.location
             if loc.start < limit_to_area[1] and loc.end > limit_to_area[0]:
                 features_in_area[name] = feature
         reference_features = features_in_area
@@ -48,7 +48,7 @@ def calculate_order_score(area_features: Sequence[CDSFeature], hits: Dict[str, H
     if not hits:
         return 0.
 
-    segments = find_segments(hits, area_features, reference_features, ref_data["cds_mapping"])
+    segments = find_segments(hits, area_features, reference_features, reference.cds_mapping)
     assert segments
 
     assert not (ref_in_query and query_in_ref)
@@ -87,16 +87,16 @@ def _build_segments_from_pairings(pairings: Sequence[Pairing], loud: bool = Fals
     return segments
 
 
-def find_segments(hits: Dict[str, Hit], features: Sequence[CDSFeature], reference_features: List[Dict[str, Any]], mapping: Dict[str, int]) -> List[List[Pairing]]:
+def find_segments(hits: Dict[str, Hit], features: Sequence[CDSFeature], reference_features: Dict[str, ReferenceCDS], mapping: Dict[int, str]) -> List[List[Pairing]]:
 
     # features should always be sorted
-    assert sorted(features) == features
+    assert sorted(features) == features  # TODO: performance
 
     pairings = []
-    for cds_index, hit in hits.items():
-        cds_index = features.index(hit.cds) + 1
+    for ref_cds_name, hit in hits.items():
+        cds_index = features.index(hit.cds) + 1  # TODO: performance
         reference_index = int(hit.reference_id)
-        reference_strand = 1 if "+" in reference_features[mapping[hit.reference_id]]["location"] else -1
+        reference_strand = reference_features[ref_cds_name].location.strand
         pairings.append((cds_index, reference_index, hit.cds.location.strand == reference_strand))
 
     pairings.sort()

@@ -3,13 +3,15 @@
 
 """ Handles HTML generation for the clusterblast variants """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 
 from antismash.common import path
 from antismash.common.html_renderer import HTMLSections, FileTemplate, Markup
 from antismash.common.layers import RegionLayer, RecordLayer, OptionsLayer
 from antismash.common.secmet import Record, Region, locations
 
+from .analysis import trim_to_best_hit
+from .data_structures import ScoresByProtocluster, ReferenceScorer
 from .results import ClusterCompareResults
 
 
@@ -34,12 +36,14 @@ def generate_html(region_layer: RegionLayer, results: ClusterCompareResults,
     # TODO adjust tooltip by variant
     tooltip = base_tooltip % "clusters from the MiBIG database"
     tooltip += "<br>Click on an accession to open that entry in the MiBIG database."
-    for variant, result in sorted(results.get_all_variants().items()):
-        scores = result.scores_by_region.get(region_layer.get_region_number(), [])[:10]  # TODO: make limit customisable
+    for variant, result in sorted(results.results_by_region[region_layer.get_region_number()].items()):
+        scores = result.scores_by_region[:10]  # TODO: make limit customisable
         tag = "%s-cluster-compare" % (variant.replace(" ", "-"))
         search_type = "mibig"  # TODO: fix this for only known variants
         if "PC_TO_PC" in variant:
             search_type = "matrix"
+        elif "ALL_TO_ALL" in variant:
+            search_type = "single"  # TODO: limit results to 10/custom option
         div = generate_div(tag, region_layer, record_layer, options_layer, search_type, tooltip, scores, result.scores_by_protocluster)
         html.add_detail_section(tag, div, tag)
 
@@ -48,11 +52,11 @@ def generate_html(region_layer: RegionLayer, results: ClusterCompareResults,
 
 class Row:
     class SubRow:
-        def __init__(self, ref_product, scores_per_proto):
+        def __init__(self, ref_product: str, scores_per_proto: ScoresByProtocluster) -> None:
             self.product = ref_product
             self.scores_per_proto = scores_per_proto
 
-    def __init__(self, accession, reg, pro, scorer, proto_results, region):
+    def __init__(self, accession: str, reg, pro, scorer, proto_results, region) -> None:
         self.accession = accession
         self.subrows = []
         assert not scorer, type(scorer)
@@ -60,64 +64,53 @@ class Row:
 
 def generate_div(tag: str, region_layer: RegionLayer, record_layer: RecordLayer,
                  options_layer: OptionsLayer, search_type: str,
-                 tooltip: str, results: List[Any], proto_results: Dict[int, Dict[Any, Dict[Any, Any]]]) -> Markup:  # TODO fix typing
+                 tooltip: str, results: List[Any], proto_results: Union[ScoresByProtocluster, List[ReferenceScorer]]) -> Markup:  # TODO fix typing
     """ Generates the specific HTML section of the body for a given variant of
         clusterblast
     """
-    large_rows = []
-    if search_type == "matrix":
-        for proto_number, results in proto_results.items():
-            for acc_reg_pro, scorer_dict in results.items():
-                import logging; logging.critical(acc_reg_pro); logging.critical(" == "); logging.critical(scorer_dict)
-                acc, reg, pro = acc_reg_pro
-                import logging; logging.critical(scorer_dict)
-                large_rows.append(Row(acc, reg, pro, scorer_dict, proto_results, region_layer))
     template = FileTemplate(path.get_full_path(__file__, "templates", "%s.html" % search_type))
-    return template.render(tag=tag, record=record_layer, region=region_layer, options=options_layer, tooltip=tooltip, results=results, proto_results=proto_results, large_rows=large_rows)
+    return template.render(tag=tag, record=record_layer, region=region_layer, options=options_layer, tooltip=tooltip, results=results, proto_results=proto_results)
 
 
 def generate_javascript_data(record: Record, region: Region, results: ClusterCompareResults) -> Dict[str, Any]:
     data = {
     }
-    for variant, result in results.get_all_variants().items():
+    for variant, result in results.results_by_region[region.get_region_number()].items():
         variant_data = {
             "reference_clusters": {}
         }  # type: Dict[str, Dict[str, Any]]
 
-        scores = result.scores_by_region.get(region.get_region_number(), [])[:10]
+        scores = result.scores_by_region[:10]  # TODO: use matching custom option as above
         if not scores:
             continue
 
         data[variant] = variant_data
 
-        for accession, totalscore_ref in scores:
-            _, ref = totalscore_ref
-            genes = ref.get_cds_json()
-            for name, gene in genes.items():
-                gene["locus_tag"] = name
-                location = locations.location_from_string(gene["location"])
-                gene["start"] = location.start
-                gene["end"] = location.end
-                gene["strand"] = location.strand
-                gene["linked"] = {}
+        for reference, score in scores:
             ref_entry = {  # TODO: merge these for different protoclusters
-                "links": [],
-                "start": ref.start,
-                "end": ref.end,
+                "start": reference.start,
+                "end": reference.end,
+                "links": [],  # added to later
+                "genes": [],  # added to later
+                "reverse": False,  # potentially changed later
             }
-            if not isinstance(accession, str):
-                accession = "%s: %s-%s (%s)" % (accession[0], accession[1].start, accession[1].end, accession[2].product)
+            genes = {}
+            for name, cds in reference.cdses.items():
+                gene_json = cds.get_minimal_json()
+                gene_json["linked"] = {}
+                genes[cds.name] = gene_json
+            # TODO: match reference names/labels for both rows in HTML and javascript for drawing
+            accession = "%s: %s-%s (%s)" % (reference.accession, reference.start, reference.end, ", ".join(reference.products))
             variant_data["reference_clusters"][accession] = ref_entry
 
             mismatching_strands = 0
-            for ref_cds_id, hit in result.hits_by_region.get(region.get_region_number(), {}).get(accession, {}).items():
+            for ref_cds_id, hit in trim_to_best_hit(result.hits_by_region.get(reference, {})).items():
                 assert locations.locations_overlap(hit.cds.location, region.location)
                 query_cds = hit.cds
                 query_point = query_cds.location.start + (query_cds.location.end - query_cds.location.start) // 2
-                ref_cds = ref.cdses[ref.cds_mapping[ref_cds_id]]
-                ref_location = locations.location_from_string(ref_cds.location)
-                subject_point = ref_location.start + (ref_location.end - ref_location.start) // 2
-                if query_cds.location.strand != ref_location.strand:
+                ref_cds = reference.cdses[ref_cds_id]
+                subject_point = ref_cds.location.start + (ref_cds.location.end - ref_cds.location.start) // 2
+                if query_cds.location.strand != ref_cds.location.strand:
                     mismatching_strands += 1
                 genes[ref_cds.name]["linked"][region.get_region_number()] = query_cds.get_name()
                 ref_entry["links"].append({
