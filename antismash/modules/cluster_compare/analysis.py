@@ -58,13 +58,11 @@ KIRRO_SCORES = {   # kirromycin/1070
 
 
 def filter_by_query_area(area: CDSCollection, hits_by_reference: HitsByReference) -> HitsByReference:
-    # TODO fix performance
-    area_cds_names = {cds.get_name() for cds in area.cds_children}
     hits_for_area = defaultdict(lambda: defaultdict(list))  # type: HitsByReference
     for ref_area, hits_by_ref_area in hits_by_reference.items():
         for ref_id, hits in hits_by_ref_area.items():
             for hit in hits:
-                if hit.cds.get_name() in area_cds_names:
+                if hit.cds in area:
                     hits_for_area[ref_area][ref_id].append(hit)
     return hits_for_area
 
