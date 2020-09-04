@@ -12,7 +12,8 @@ from .data_structures import ScoresByRegion, ScoresByProtocluster, Hit, HitsByRe
 
 
 class VariantResults:
-    def __init__(self, variant_name: str, scores_by_region: ScoresByRegion, scores_by_protocluster: Union[ScoresByProtocluster, List[ReferenceScorer]], hits_by_region: HitsByReference) -> None:
+    def __init__(self, variant_name: str, scores_by_region: ScoresByRegion,
+                 scores_by_protocluster: Union[ScoresByProtocluster, List[ReferenceScorer]], hits_by_region: HitsByReference) -> None:
         assert variant_name
         self.variant_name = variant_name
         self.scores_by_region = scores_by_region

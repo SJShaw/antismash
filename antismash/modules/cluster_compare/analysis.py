@@ -113,28 +113,29 @@ def score_as_protoclusters(label: str, region: Region, hits_by_reference: HitsBy
     local_hits = filter_by_query_area(region, hits_by_reference)
 
     # rank the results for the full region independently, as they're the sum of protocluster scores
-    reference_total_scores = defaultdict(float)  # type: Dict[ReferenceArea, float]
+    reference_total_scores = defaultdict(float)  # type: Dict[ReferenceRegion, float]
 
-    scores_by_protocluster = defaultdict(dict)  # type: Dict[int, Dict[ReferenceArea, ReferenceScorer]]
+    scores_by_protocluster = defaultdict(dict)  # type: Dict[int, Dict[ReferenceRegion, ReferenceScorer]]
     for protocluster in region.get_unique_protoclusters():
         for scorer in score_query_area(protocluster, local_hits, query_components, order, component):
             reference_total_scores[scorer.reference] += scorer.final_score
             scores_by_protocluster[protocluster.get_protocluster_number()][scorer.reference] = scorer
 
     region_ranking = sorted(reference_total_scores.items(), key=lambda x: x[1], reverse=True)
+    region_ranking, scores_by_protocluster = apply_limits_to_rankings(region_ranking, scores_by_protocluster)
     return VariantResults(label, region_ranking, scores_by_protocluster, local_hits)
 
 
 def score_as_region(label: str, region: Region, hits_by_reference: HitsByReference, query_components: Dict[CDSCollection, Components], order: Callable, component: Callable) -> VariantResults:
     local_hits = filter_by_query_area(region, hits_by_reference)
-    ranking = score_query_area(region, local_hits, query_components, order, component)
+    ranking = score_query_area(region, local_hits, query_components, order, component)[:50]  # TODO: make customisable
     region_ranking = sorted(((scorer.reference, scorer.final_score) for scorer in ranking), key=lambda x: x[1])
     return VariantResults(label, region_ranking, ranking, local_hits)
 
 
 def score_against_protoclusters(label: str, region: Region, hits_by_reference: HitsByReference, query_components: Dict[CDSCollection, Components], order: Callable, component: Callable) -> VariantResults:
     score_matrix = defaultdict(lambda: defaultdict(dict))  # type: Dict[int, Dict[ReferenceRegion, Dict[ReferenceProtocluster, ReferenceScorer]]]
-    reference_best_scores = defaultdict(lambda: defaultdict(float))  # type: Dict[Protocluster, Dict[ReferenceProtocluster, float]]
+    reference_best_scores = defaultdict(lambda: defaultdict(float))  # type: Dict[Protocluster, Dict[ReferenceRegion, float]]
     local_hits = filter_by_query_area(region, hits_by_reference)
     for ref_region in local_hits:
         hits_for_ref_region = {ref_region: local_hits[ref_region]}
@@ -146,12 +147,26 @@ def score_against_protoclusters(label: str, region: Region, hits_by_reference: H
                     reference_best_scores[protocluster][ref_region] = max(scorer.final_score, reference_best_scores[protocluster][ref_region])  # TODO: this might be misrepresentative
                     score_matrix[protocluster.get_protocluster_number()][ref_region][ref_protocluster] = scorer
 
-    reference_total_scores = defaultdict(float)  # type: Dict[ReferenceArea, float]
+    reference_total_scores = defaultdict(float)  # type: Dict[ReferenceRegion, float]
     for ref_region_to_score in reference_best_scores.values():
         for ref_region, score in ref_region_to_score.items():
             reference_total_scores[ref_region] += score
     region_ranking = sorted(reference_total_scores.items(), key=lambda x: x[1], reverse=True)  # TODO: misrepresentative continued
+    region_ranking, score_matrix = apply_limits_to_rankings(region_ranking, score_matrix)
     return VariantResults(label, region_ranking, score_matrix, local_hits)  # TODO: hit building isn't any good here
+
+
+ValuesByReference = Dict[int, Dict[ReferenceRegion, Any]]
+
+
+def apply_limits_to_rankings(region_ranking: ScoresByRegion, score_matrix: ValuesByReference,
+                             max_reference_regions: int = 50) -> Tuple[ScoresByRegion, ValuesByReference]:  # TODO use a const/config option
+    region_ranking = region_ranking[:max_reference_regions]
+    regions = {rank[0] for rank in region_ranking}
+    limited_matrix = {}  # type: ValuesByReference
+    for key, pairs_by_ref_region in score_matrix.items():
+        limited_matrix[key] = {ref: value for ref, value in pairs_by_ref_region.items() if ref in regions}
+    return region_ranking, limited_matrix
 
 
 def run(record: Record) -> ClusterCompareResults:
@@ -164,8 +179,8 @@ def run(record: Record) -> ClusterCompareResults:
     _, hits_by_name = find_diamond_matches(record, path.get_full_path(__file__, "data", "proteins.dmnd"))
     hits = convert_to_references(hits_by_name, references)
     import time
-    fastest = 1000
-    slowest = 0
+    fastest = 1000.
+    slowest = 0.
 
     results_per_region = {}  # type: Dict[int, Dict[str, VariantResults]]
     for region in record.get_regions():

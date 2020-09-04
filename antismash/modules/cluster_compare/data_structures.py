@@ -88,7 +88,7 @@ class ReferenceArea:
         self.cds_mapping = cds_mapping
         self.cdses = {name: cds for name, cds in cdses.items() if cds.overlaps_with(self)}
         self.products = products
-        self._components = None  # type: Components
+        self._components = None  # type: Optional[Components]
 
     def get_product_string(self) -> str:
         return ", ".join(self.products)
@@ -180,7 +180,7 @@ def load_data(filename: str) -> Dict[str, ReferenceRecord]:
 
 class ReferenceScorer:
     def __init__(self, best_hits: Dict[str, Hit],
-                 reference: ReferenceArea, query_features: Tuple[CDSFeature, ...], query_components,
+                 reference: ReferenceRegion, query_features: Tuple[CDSFeature, ...], query_components: Components,
                  ident_calculator: Callable, order_calculator: Callable, component_calculator: Callable) -> None:  # TODO parse data to object
         # assume query_features are sorted by location
         self.accession = reference.accession
@@ -198,7 +198,7 @@ class ReferenceScorer:
         self._order_calculator = order_calculator
         self._component_calculator = component_calculator
         self._query_components = query_components
-        self._final_score = None  # type: float
+        self._final_score = None  # type: Optional[float]
 
     def calc_identity(self, max_id: float) -> float:
         self._max_id = max_id
@@ -263,5 +263,5 @@ class ReferenceScorer:
 
 
 HitsByReference = Dict[ReferenceRegion, Dict[str, List[Hit]]]
-ScoresByRegion = List[Tuple[ReferenceArea, float]]
-ScoresByProtocluster = Dict[int, Dict[ReferenceArea, ReferenceScorer]]
+ScoresByRegion = List[Tuple[ReferenceRegion, float]]
+ScoresByProtocluster = Dict[int, Dict[ReferenceRegion, Any]]
