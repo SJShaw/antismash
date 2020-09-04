@@ -10,7 +10,6 @@ from typing import (
 )
 
 from antismash.common.secmet import CDSFeature
-from antismash.common.secmet.locations import location_from_string
 
 from .data_structures import Hit, ReferenceArea, ReferenceCDS
 
@@ -22,31 +21,19 @@ EXTRA_SEGMENT_PENALTY = 0.75  # for multiple disjoint segments
 REVERSED_SEGMENT_PENALTY = 0.9  # for when the strand of a segment doesn't match
 
 
-def calculate_order_score_ref_in_query(area_features: Sequence[CDSFeature], hits: Dict[str, Hit], reference: ReferenceArea, limit_to_area: Tuple[int, int] = None) -> float:
-    return calculate_order_score(area_features, hits, reference, ref_in_query=True, limit_to_area=limit_to_area)
+def calculate_order_score_ref_in_query(area_features: Sequence[CDSFeature], hits: Dict[str, Hit], reference: ReferenceArea) -> float:
+    return calculate_order_score(area_features, hits, reference, ref_in_query=True)
 
 
-def calculate_order_score_query_in_ref(area_features: Sequence[CDSFeature], hits: Dict[str, Hit], reference: ReferenceArea, limit_to_area: Tuple[int, int] = None) -> float:
-    return calculate_order_score(area_features, hits, reference, query_in_ref=True, limit_to_area=limit_to_area)
+def calculate_order_score_query_in_ref(area_features: Sequence[CDSFeature], hits: Dict[str, Hit], reference: ReferenceArea) -> float:
+    return calculate_order_score(area_features, hits, reference, query_in_ref=True)
 
 
-def calculate_order_score(area_features: Sequence[CDSFeature], hits: Dict[str, Hit], reference: ReferenceArea, ref_in_query: bool = False, query_in_ref: bool = False, limit_to_area: Tuple[int, int] = None) -> float:
+def calculate_order_score(area_features: Sequence[CDSFeature], hits: Dict[str, Hit], reference: ReferenceArea, ref_in_query: bool = False, query_in_ref: bool = False) -> float:
     if not hits:
         return 0.
     # build lists of reference features and features ordered by location
     reference_features = reference.cdses
-    if limit_to_area:
-        features_in_area = {}  # type: Dict[str, ReferenceCDS]
-        for name, feature in reference_features.items():
-            loc = feature.location
-            if loc.start < limit_to_area[1] and loc.end > limit_to_area[0]:
-                features_in_area[name] = feature
-        reference_features = features_in_area
-        hits_in_area = {ref_id: ref_hits for ref_id, ref_hits in hits.items() if ref_id in reference_features}
-        hits = hits_in_area
-
-    if not hits:
-        return 0.
 
     segments = find_segments(hits, area_features, reference_features, reference.cds_mapping)
     assert segments
@@ -62,10 +49,8 @@ def calculate_order_score(area_features: Sequence[CDSFeature], hits: Dict[str, H
     return score_segments(segments, max_possible)
 
 
-def _build_segments_from_pairings(pairings: Sequence[Pairing], loud: bool = False) -> List[List[Pairing]]:
+def _build_segments_from_pairings(pairings: Sequence[Pairing]) -> List[List[Pairing]]:
     segments = [[pairings[0]]]
-    if loud:
-        print("prev_pair, pairing, [strandcont, cds_contig, ref_contig]")
     for pairing in pairings[1:]:
         prev_cds, prev_ref, prev_strand_match = segments[-1][-1]
         cds, ref, strand_match = pairing
@@ -74,23 +59,14 @@ def _build_segments_from_pairings(pairings: Sequence[Pairing], loud: bool = Fals
             cds != prev_cds + 1,  # CDSes aren't contiguous
             abs(ref - prev_ref) != 1,   # references aren't contiguous
         ]):
-            if loud:
-                print(segments[-1][-1], pairing, [
-                    prev_strand_match != strand_match,  # strands no longer match
-                    cds != prev_cds + 1,  # CDSes aren't contiguous
-                    abs(ref - prev_ref) != 1,   # references aren't contiguous
-                ])
             segments.append([])
         segments[-1].append(pairing)
-    if loud:
-        print("total segment counts", [len(i) for i in segments])
     return segments
 
 
 def find_segments(hits: Dict[str, Hit], features: Sequence[CDSFeature], reference_features: Dict[str, ReferenceCDS], mapping: Dict[int, str]) -> List[List[Pairing]]:
 
-    # features should always be sorted
-    assert sorted(features) == features  # TODO: performance
+    # assumes features are sorted
 
     pairings = []
     for ref_cds_name, hit in hits.items():
