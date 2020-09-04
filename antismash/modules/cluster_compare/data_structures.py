@@ -9,6 +9,29 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from antismash.common.secmet import CDSFeature
 from antismash.common.secmet.locations import location_from_string, Location
 
+SubComponents = Dict[Any, int]
+
+
+class Components:
+    def __init__(self, nrps: SubComponents, pks: SubComponents, secmet: SubComponents, functions: SubComponents) -> None:
+        self.nrps = nrps
+        self.pks = pks
+        self.secmet = secmet
+        self.functions = functions
+
+    def __str__(self) -> str:
+        import json
+        things = {  # TODO: better naming
+            "nrps": self.nrps,
+            "pks": self.pks,
+            "secmet": self.secmet,
+            "functions": self.functions,
+        }
+        parts = []
+        for key, val in things.items():
+            parts.append("%s  %s" % (key, json.dumps({str(k): v for k, v in val.items()}, indent=1)))
+        return "\n".join(parts)
+
 
 class Hit:
     def __init__(self, reference_record: str, reference_id: str, cds: CDSFeature,
@@ -65,12 +88,21 @@ class ReferenceArea:
         self.cds_mapping = cds_mapping
         self.cdses = {name: cds for name, cds in cdses.items() if cds.overlaps_with(self)}
         self.products = products
+        self._components = None  # type: Components
 
     def get_product_string(self) -> str:
         return ", ".join(self.products)
 
     def get_identifier(self) -> str:
         return "%s (%s-%s)" % (self.accession, self.start, self.end)
+
+    def get_component_data(self) -> Optional[Components]:
+        return self._components
+
+    def set_component_data(self, data: Components) -> None:
+        if not isinstance(data, Components):
+            raise TypeError("component data expected to be 'Components', but was '%s'" % type(data))
+        self._components = data
 
 
 class ReferenceProtocluster(ReferenceArea):

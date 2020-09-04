@@ -12,30 +12,7 @@ from typing import (
 from antismash.common.secmet import CDSFeature
 from antismash.common.secmet.qualifiers.gene_functions import GeneFunction
 
-from .data_structures import ReferenceArea
-
-SubComponents = Dict[Any, int]
-
-
-class Components:
-    def __init__(self, nrps: SubComponents, pks: SubComponents, secmet: SubComponents, functions: SubComponents) -> None:
-        self.nrps = nrps
-        self.pks = pks
-        self.secmet = secmet
-        self.functions = functions
-
-    def __str__(self) -> str:
-        import json
-        things = {  # TODO: better naming
-            "nrps": self.nrps,
-            "pks": self.pks,
-            "secmet": self.secmet,
-            "functions": self.functions,
-        }
-        parts = []
-        for key, val in things.items():
-            parts.append("%s  %s" % (key, json.dumps({str(k): v for k, v in val.items()}, indent=1)))
-        return "\n".join(parts)
+from .data_structures import ReferenceArea, Components, SubComponents
 
 
 def calculate_component_score_ref_in_query(query_components: Components, reference: ReferenceArea) -> float:
@@ -142,6 +119,9 @@ def compare_modules(ref: SubComponents, query: SubComponents, ref_in_query: bool
 
 
 def gather_reference_components(reference: ReferenceArea) -> Components:
+    existing = reference.get_component_data()
+    if existing is not None:
+        return existing
     nrps = defaultdict(int)  # type: SubComponents
     pks = defaultdict(int)  # type: SubComponents
     secmet = defaultdict(int)  # type: SubComponents
@@ -166,7 +146,9 @@ def gather_reference_components(reference: ReferenceArea) -> Components:
                 continue  # TODO possibly handle unknowns
             target[tuple(module["domains"])] += 1
 
-    return Components(nrps, pks, secmet, functions)
+    results = Components(nrps, pks, secmet, functions)
+    reference.set_component_data(results)
+    return results
 
 
 def gather_query_components(area_features: Sequence[CDSFeature]) -> Components:
