@@ -181,6 +181,7 @@ class ReferenceScorer:
     def __init__(self, best_hits: Dict[str, Hit],
                  reference: ReferenceArea, query_features: Tuple[CDSFeature, ...], query_components,
                  ident_calculator: Callable, order_calculator: Callable, component_calculator: Callable) -> None:  # TODO parse data to object
+        # assume query_features are sorted by location
         self.accession = reference.accession
         self.hits_by_gene = best_hits
         for hit in best_hits.values():
@@ -222,7 +223,7 @@ class ReferenceScorer:
     @property
     def order(self) -> float:
         if self._order < 0:
-            self._order = self._order_calculator(sorted(self._query_features), self.hits_by_gene, self.reference)
+            self._order = self._order_calculator(self._query_features, self.hits_by_gene, self.reference)
         return self._order
 
     @property
