@@ -214,6 +214,11 @@ class ReferenceScorer:
             self.components,
         )
 
+    def __lt__(self, other: Any) -> bool:
+        if not isinstance(other, ReferenceScorer):
+            raise TypeError("cannot compare ReferenceScorer to %s" % type(other))
+        return self.final_score < other.final_score
+
 
 HitsByReference = Dict[ReferenceRegion, Dict[str, List[Hit]]]
 ScoresByRegion = List[Tuple[ReferenceArea, float]]

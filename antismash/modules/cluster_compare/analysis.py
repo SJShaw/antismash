@@ -79,12 +79,18 @@ def filter_by_reference_protocluster(area: ReferenceProtocluster, hits_by_refere
 
 
 def rank_scores(scores: Ranking) -> Ranking:
+    if not scores:
+        return []
     max_id = max(1, max(score.raw_identity for score in scores))
+    relevant = []
     for score in scores:
         assert score.raw_identity <= max_id
         score.calc_identity(max_id)
+        if score.identity < 0.05:  # TODO: make customisable
+            continue
+        relevant.append(score)
 
-    return sorted(scores, key=lambda x: x.final_score, reverse=True)
+    return sorted(relevant, reverse=True)
 
 
 def score_query_area(query_area: CDSCollection, hits_by_reference: HitsByReference, query_components: Dict[CDSCollection, Components], order: Callable, component: Callable) -> Ranking:
@@ -99,6 +105,8 @@ def score_query_area(query_area: CDSCollection, hits_by_reference: HitsByReferen
     for reference_area, hits in best_hits.items():
         scorer = ReferenceScorer(hits, reference_area, query_area.cds_children, query_components[query_area],
                                  calculate_identity_score, order, component)
+        if scorer.order < 0.05 or scorer.components < 0.05:  # TODO: make customisable
+            continue
         scores.append(scorer)
     return rank_scores(scores)
 
