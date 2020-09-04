@@ -262,10 +262,7 @@ def find_diamond_matches(record: Record, database: str) -> Tuple[HitsByCDS, Hits
         "--evalue", "1e-05",
         "--outfmt", "6",  # 6 is blast tabular format, just as in blastp
     ]
-    features = []  # type: List[CDSFeature]
-    for region in record.get_regions():
-        features.extend(region.cds_children)
-    assert features
+    features = record.get_cds_features_within_regions()
 
     with NamedTemporaryFile() as temp_file:
         temp_file.write(fasta.get_fasta_from_features(features, numeric_names=True).encode())
