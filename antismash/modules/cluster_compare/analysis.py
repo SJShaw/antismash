@@ -165,6 +165,9 @@ def run(record: Record) -> ClusterCompareResults:
     # TODO keep hits_by_cds for performance
     _, hits_by_name = find_diamond_matches(record, path.get_full_path(__file__, "data", "proteins.dmnd"))
     hits = convert_to_references(hits_by_name, references)
+    import time
+    fastest = 1000
+    slowest = 0
 
     results_per_region = {}  # type: Dict[int, Dict[str, VariantResults]]
     for region in record.get_regions():
@@ -172,6 +175,7 @@ def run(record: Record) -> ClusterCompareResults:
         query_components[region] = gather_query_components(region.cds_children)
         for protocluster in region.get_unique_protoclusters():
             query_components[protocluster] = gather_query_components(protocluster.cds_children)
+        start = time.time()
         logging.debug("analysing %s region: %s", record, region)
         # TODO: keep only results that are non-zero
         region_results = {}
@@ -188,7 +192,11 @@ def run(record: Record) -> ClusterCompareResults:
         region_results["PC_TO_PC_RiQ"] = score_against_protoclusters("PC_TO_ALL_RiQ", region, hits, query_components, calculate_order_score_ref_in_query, calculate_component_score_ref_in_query)
 
         results_per_region[region.get_region_number()] = region_results
+        total = time.time() - start
+        fastest = min(fastest, total)
+        slowest = max(slowest, total)
 
+    logging.critical("fastest region time: %s, slowest: %s", fastest, slowest)
     return ClusterCompareResults(record.id, results_per_region)
 
 
