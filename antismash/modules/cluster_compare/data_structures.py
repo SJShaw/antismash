@@ -167,10 +167,14 @@ class ReferenceRecord:
         return ReferenceRecord(accession, regions, data["cds_mapping"])
 
 
+_LOADED_DATA = {}  # type: Dict[str, Dict[str, ReferenceRecord]]
+
 def load_data(filename: str) -> Dict[str, ReferenceRecord]:
-    with open(filename) as handle:
-        raw = json.loads(handle.read())
-    return {accession: ReferenceRecord.from_json(accession, record) for accession, record in raw.items()}
+    if filename not in _LOADED_DATA:
+        with open(filename) as handle:
+            raw = json.loads(handle.read())
+        _LOADED_DATA[filename] = {accession: ReferenceRecord.from_json(accession, record) for accession, record in raw.items()}
+    return _LOADED_DATA[filename]
 
 
 class ReferenceScorer:
