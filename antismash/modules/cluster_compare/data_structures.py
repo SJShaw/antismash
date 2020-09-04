@@ -169,6 +169,7 @@ class ReferenceRecord:
 
 _LOADED_DATA = {}  # type: Dict[str, Dict[str, ReferenceRecord]]
 
+
 def load_data(filename: str) -> Dict[str, ReferenceRecord]:
     if filename not in _LOADED_DATA:
         with open(filename) as handle:
@@ -197,14 +198,18 @@ class ReferenceScorer:
         self._order_calculator = order_calculator
         self._component_calculator = component_calculator
         self._query_components = query_components
+        self._final_score = None  # type: float
 
     def calc_identity(self, max_id: float) -> float:
         self._max_id = max_id
+        self._final_score = None
         return self.identity
 
     @property
     def final_score(self) -> float:
-        return (self.identity * self.order * self.components) ** (1/3)
+        if self._final_score is None:
+            self._final_score = (self.identity * self.order * self.components) ** (1/3)
+        return self._final_score
 
     @property
     def raw_identity(self) -> float:
