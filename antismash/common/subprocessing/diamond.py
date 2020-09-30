@@ -4,7 +4,7 @@
 """ A collection of functions for running diamond.
 """
 
-
+import logging
 from typing import List, Optional
 
 from helperlibs.wrappers.io import TemporaryDirectory
@@ -39,7 +39,10 @@ def run_diamond(subcommand: str,
 
         result = execute(params)
         if not result.successful():
-            raise RuntimeError("diamond failed to run: %s -> %s" % (subcommand, result.stderr[-100:]))
+            errors = result.stderr
+            logging.error("Failure running diamond: %r", " ".join(params))
+            logging.error(errors)
+            raise RuntimeError("diamond failed to run: %s -> %s" % (subcommand, errors.strip().splitlines()[-1]))
     return result
 
 

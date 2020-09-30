@@ -58,7 +58,8 @@ def prepare_data(logging_only: bool = False) -> List[str]:
             a list of error messages (only if logging_only is True)
     """
     failure_messages = []
-    data_dir = path.get_full_path(__file__, "data")
+    options = get_config()
+    data_dir = os.path.join(options.database_dir, "cluster_compare")
     # TODO handle custom data dir as additional or replacement
     cluster_defs = os.path.join(data_dir, 'data.json')
     protein_seqs = os.path.join(data_dir, "proteins.fasta")

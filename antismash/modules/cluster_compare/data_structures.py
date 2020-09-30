@@ -220,6 +220,7 @@ class ReferenceScorer:
     @property
     def identity(self) -> float:
         assert self._max_id > 0
+        #import logging; logging.critical("max_id: %s", self._max_id)
         if self._identity < 0:
             self._identity = self._ident_calculator(self.raw_identity, self._max_id)
         assert 0 <= self._identity <= 1, (self._identity, self.raw_identity, self._max_id)

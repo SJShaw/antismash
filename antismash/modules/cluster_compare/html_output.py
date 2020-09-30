@@ -75,6 +75,8 @@ def generate_div(tag: str, region_layer: RegionLayer, record_layer: RecordLayer,
 def generate_javascript_data(record: Record, region: Region, results: ClusterCompareResults) -> Dict[str, Any]:
     data = {
     }
+    import logging; logging.critical("cluster compare: skipping JS output components")
+    return data
     for variant, result in results.results_by_region[region.get_region_number()].items():
         variant_data = {
             "reference_clusters": {}

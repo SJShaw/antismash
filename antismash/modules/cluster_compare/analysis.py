@@ -4,6 +4,7 @@
 from collections import defaultdict
 import logging
 import math
+import os
 from tempfile import NamedTemporaryFile
 from typing import (
     Any,
@@ -21,6 +22,7 @@ from antismash.common.secmet import (
     Record,
 )
 from antismash.common.secmet.features import CDSCollection, Region, Protocluster
+from antismash.config import get_config
 
 from .components import calculate_component_score, calculate_component_score_ref_in_query, calculate_component_score_query_in_ref, gather_query_components, Components
 from .data_structures import load_data, Hit, ReferenceRecord, ReferenceRegion, ScoresByRegion, ScoresByProtocluster, ReferenceScorer, ReferenceProtocluster, ReferenceArea, HitsByReference
@@ -173,10 +175,11 @@ def run(record: Record) -> ClusterCompareResults:
     if not record.get_regions():
         return ClusterCompareResults(record.id, {})
     logging.debug("loading reference database")
-    references = load_data(path.get_full_path(__file__, "data", "data.json"))  # TODO: delay and restrict to only those with hits
+    data_dir = os.path.join(get_config().database_dir, "cluster_compare")
+    references = load_data(os.path.join(data_dir, "data.json"))  # TODO: delay and restrict to only those with hits
     logging.debug("reference database loaded")
     # TODO keep hits_by_cds for performance
-    _, hits_by_name = find_diamond_matches(record, path.get_full_path(__file__, "data", "proteins.dmnd"))
+    _, hits_by_name = find_diamond_matches(record, os.path.join(data_dir, "proteins.dmnd"))
     hits = convert_to_references(hits_by_name, references)
     import time
     fastest = 1000.

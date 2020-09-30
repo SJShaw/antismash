@@ -34,10 +34,16 @@ def compare(ref: Components, query: Components, ref_in_query: bool = False, quer
     pks = compare_modules(ref.pks, query.pks, ref_in_query, query_in_ref)
     secmet = compare_combos(ref.secmet, query.secmet, ref_in_query, query_in_ref)
     functions = compare_combos(ref.functions, query.functions, ref_in_query, query_in_ref)  # TODO: skip if a minimal run? smcogs missing will cause scores to plummet
-    max_modules = sum(ref.pks.values()) + sum(ref.nrps.values())
+    if ref_in_query:
+        target = ref
+    elif query_in_ref:
+        target = query
+    else:
+        target = ref  # TODO: placeholder
+    max_modules = sum(target.pks.values()) + sum(target.nrps.values())
     modules = 1.
     if max_modules:
-        nrps_weighting = sum(ref.nrps.values()) / max_modules
+        nrps_weighting = sum(target.nrps.values()) / max_modules
         if 0.001 <= nrps_weighting <= 0.999:
             modules = (nrps * nrps_weighting + pks * (1-nrps_weighting)) / 2
         elif nrps_weighting >= 0.999:
