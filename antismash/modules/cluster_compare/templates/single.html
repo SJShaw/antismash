@@ -1,0 +1,31 @@
+<div class="{{tag}}">
+    <div class="heading">
+      <span>Similar known gene clusters</span>
+      {{help_tooltip(tooltip, tag)}}
+    </div>
+  {% if results %}
+  <div id="cb-comparison-container-{{region.anchor_id}}-{{tag}}"></div>
+  <table class="cb-heat-table">
+    <tr>
+     <th>Reference</th>
+     <th><span class="cb-heat-product">Aggregated</span></th>
+     <th>Similarity score</th>
+     <th>Type</th>
+     <th>Compound(s)</th>
+    </tr>
+    {% for score in proto_results %}
+     <tr class="cb-heat-row" data-accession="{{score.reference.get_identifier()}}">
+      <td><a href="missing ref URL setup">{{score.reference.get_identifier()}}</a></td>
+      {% set perc = "{:.0f}".format(score.final_score*100) %}
+      {% set colour = "rgb(0, 0, 0, {:.2f})".format(score.final_score) %}
+      <td class="cb-heat-cell" title="{{score.table_string()}}" style="background-image: linear-gradient(to top, {{colour}}, {{colour}} {{perc}}%, white {{perc}}%)"></td>
+      <td>{{"{:.2f}".format(score.final_score)}}</td>
+      <td>{{score.reference.get_product_string()}}</td>
+      <td>{{"missing description"}}</td>
+     </tr>
+    {% endfor %}
+   </table>
+  {% else %}
+    <div><p>No matches found.</p></div>
+  {% endif %}
+</div>

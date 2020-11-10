@@ -1,0 +1,48 @@
+<div class="{{tag}}">
+    <div class="heading">
+      <span>Similar known gene clusters</span>
+      {{help_tooltip(tooltip, tag)}}
+    </div>
+  {% if results %}
+  <div id="cb-comparison-container-{{region.anchor_id}}-{{tag}}"></div>
+  <table class="cb-heat-table">
+    <tr>
+     <th>Reference</th>
+     {% for proto in region.get_unique_protoclusters() %}
+     <th><span class="cb-heat-product">{{proto.product}}</span></th>
+     {% endfor %}
+     <th>Similarity score</th>
+     <th>Type</th>
+     <th>Compound(s)</th>
+    </tr>
+    {% for reference, total in results %}
+      <tr class="cb-heat-row" data-accession="{{reference.get_identifier()}}">
+       <td><a href="missing ref URL setup">{{reference.get_identifier()}}</a></td>
+       {% for proto in region.get_unique_protoclusters() %}
+         <td>?</td>
+       {% endfor %}
+       <td>{{"{:.2f}".format(total)}}</td>
+       <td>type</td>
+       <td>{{reference.get_product_string()}}</td>
+      </tr>
+       {% for ref_proto in reference.protoclusters %}
+        <tr class="cb-heat-row" data-accession="{{reference.get_identifier()}}-proto...">
+        <td>{{ref_proto.product}}</td>
+        {% for proto in region.get_unique_protoclusters() %}
+          {%- set scorer = proto_results.get(proto.get_protocluster_number(), {}).get(reference, {}).get(ref_proto) -%}
+          {% if scorer -%}
+            {%- set perc = "{:.0f}".format(scorer.final_score*100) -%}
+            {%- set colour = "rgb(0, 0, 0, {:.2f})".format(scorer.final_score) -%}
+            <td class="cb-heat-cell" title="{{scorer.table_string()}}" style="background-image: linear-gradient(to top, {{colour}}, {{colour}} {{perc}}%, white {{perc}}%)"></td>
+          {% else %}
+            <td class="cb-heat-cell" title="no hits" style="background-image: linear-gradient(to top, rgb(0, 0, 0, 0%), rgb(0, 0, 0, 0%) 0%, white 0%)"></td>
+          {% endif %}
+         {% endfor %}
+        </tr>
+       {% endfor %}
+    {% endfor %}
+   </table>
+  {% else %}
+    <div><p>No matches found.</p></div>
+  {% endif %}
+</div>
