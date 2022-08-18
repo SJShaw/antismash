@@ -38,3 +38,11 @@ RULE halogenated
     CUTOFF 5
     NEIGHBOURHOOD 10
     CONDITIONS Trp_halogenase
+
+RULE 3_4_AHBA
+    CATEGORY other
+    DESCRIPTION 3-amino-4-hydroxybenzoic acid subcluster
+    RELATED AMP-binding
+    CUTOFF 20
+    NEIGHBOURHOOD 10
+    CONDITIONS DeoC and DHQS

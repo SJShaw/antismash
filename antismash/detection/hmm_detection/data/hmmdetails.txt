@@ -1,3 +1,4 @@
+4HBT_2	Hotdog fold Thioesterase-like superfamily	25	PF13279.hmm
 Condensation	Condensation domain	20	Condensation.hmm
 AMP-binding	Adenylation domain	20	AMP-binding.hmm
 A-OX	Adenylation domain with integrated oxidase	500	A-OX.hmm
@@ -392,3 +393,5 @@ Amidohydro_1	Amidohydrolase family	25	PF01979.hmm
 GFO_IDH_MocA	Oxidoreductase family, NAD-binding Rossmann fold	24	PF01408.hmm
 GFO_IDH_MocA_C3	GFO/IDH/MocA C-terminal domain	27	PF22725.hmm
 SIS_2	SIS domain	27	PF13580.hmm
+DHQS	3-dehydroquinate synthase II	22	PF01959.18.hmm
+DeoC	DeoC/LacD family aldolase	23	PF01791.11.hmm
