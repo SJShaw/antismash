@@ -167,6 +167,8 @@ class Module(Feature):
 
     def get_substrate_monomer_pairs(self) -> Tuple[Tuple[str, str], ...]:
         """ Returns the substrate/monomer pairings as a tuple of tuples """
+        if self.is_non_elongating():
+            return (("non-elongating", "non-elongating"),)
         return tuple(self._substrate_monomer_pairs)
 
     def to_biopython(self, qualifiers: Dict[str, Any] = None) -> List[SeqFeature]:

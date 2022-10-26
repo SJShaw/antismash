@@ -33,35 +33,42 @@ CP = "ACP"
 
 class Component(Component_actual):
     """ a tiny wrapper to avoid always supplying a dummy CDS name """
-    def __init__(self, domain, cds_name="test_name", subtype=None):
+    def __init__(self, domain, cds_name="test_name", subtype=None, subsubtype=None):
         if subtype:
             sub = DummyHMMResult(subtype)
+            if subsubtype:
+                sub.add_internal_hits([DummyHMMResult(subsubtype)])
             domain.add_internal_hits([sub])
         super().__init__(domain, cds_name)
 
 
-def build_modules_for_cds(domains, subtypes, cds_name="test_name"):
+def build_modules_for_cds(domains, subtypes, cds_name="test_name", subsubtypes=[]):
     subs = iter(subtypes)
+    subsubs = iter(subsubtypes)
     for domain in domains:
         if domain.hit_id == PKS_START:
             sub = DummyHMMResult(next(subs), domain.query_start, domain.query_end)
             domain.add_internal_hits([sub])
+            if sub.hit_id == TRANS_AT_SUBTYPE:
+                sub.add_internal_hits([DummyHMMResult(next(subsubs), domain.query_start, domain.query_end)])
     return build_modules_for_cds_actual(domains, cds_name)
 
 
-def add_component(module, name, sub=None, start=1, end=10, cds_name="test_name", lookaheads=None):
+def add_component(module, name, sub=None, subsub=None, start=1, end=10, cds_name="test_name", lookaheads=None):
     assert cds_name
     if lookaheads is None:
         lookaheads = []
-    module.add_component(Component(DummyHMMResult(name, start, end), cds_name, sub), lookaheads)
+    module.add_component(Component(DummyHMMResult(name, start, end), cds_name, sub, subsub), lookaheads)
 
 
-def build_module(names, subtypes=None, first_in_cds=True, cds_name="test_name"):
+def build_module(names, subtypes=None, subsubtypes=None, first_in_cds=True, cds_name="test_name"):
     module = Module(first_in_cds=first_in_cds)
     subs = iter(subtypes or [])
+    subsubs = iter(subsubtypes or [])
     for domain in names:
         sub = next(subs) if domain == PKS_START and subtypes else None
-        add_component(module, domain, sub, cds_name=cds_name)
+        subsub = next(subsubs) if domain == PKS_START and subsubtypes else None
+        add_component(module, domain, sub, subsub, cds_name=cds_name)
     return module
 
 
@@ -97,13 +104,13 @@ class TestComponent(unittest.TestCase):
         assert component.classification == "CP"
 
         domain._hit_id = PKS_START
-        component = Component(domain, subtype="some-subtype")
+        component = Component(domain, subtype="some-subtype", subsubtype="dummy")
         assert component.subtype == "some-subtype"
-        assert component.subtypes == ["some-subtype"]
+        assert component.subtypes == ["some-subtype", "dummy"]
         assert component.classification == "KS"
 
     def test_json(self):
-        component = Component(DummyHMMResult(PKS_START), subtype=TRANS_AT_SUBTYPE)
+        component = Component(DummyHMMResult(PKS_START), subtype=TRANS_AT_SUBTYPE, subsubtype="dummy")
         intermediate = component.to_json()
         new = Component.from_json(json.loads(json.dumps(intermediate)))
         assert new.to_json() == intermediate
@@ -265,6 +272,14 @@ class TestModule(unittest.TestCase):
         module = build_module([PKS_START, PKS_LOAD, "Trans-AT_docking", CP])
         assert not module.is_trans_at()
         assert module.is_complete()  # still complete, just a little strange
+
+    def test_trans_at_non_elongating(self):
+        for value in ["non-elongating-type", "non-elongating-other"]:
+            module = build_module([PKS_START, CP], [TRANS_AT_SUBTYPE], [value])
+            assert module.is_non_elongating()
+        for value in ["elongating-type", "other"]:
+            module = build_module([PKS_START, CP], [TRANS_AT_SUBTYPE], [value])
+            assert not module.is_non_elongating()
 
     def test_trailing_modifiers(self):
         error = "modification domain after carrier protein"

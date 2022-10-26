@@ -145,7 +145,8 @@ class NRPSPKSDomains(module_results.DetectionResults):
                 feature = ModuleFeature(domains, mod_type, complete=module.is_complete(),
                                         starter=module.is_starter_module(),
                                         final=module.is_termination_module(),
-                                        iterative=module.is_iterative())
+                                        iterative=module.is_iterative(),
+                                        non_elongating=module.is_non_elongating())
                 record.add_module(feature)
 
     @staticmethod

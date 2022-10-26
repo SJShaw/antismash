@@ -405,6 +405,12 @@ class Module:
         """ Returns True if the module has no components """
         return not self._components
 
+    def is_non_elongating(self) -> bool:
+        """ Returns True if the module does not elongate """
+        if not self._starter:
+            return False
+        return any(name.startswith("non-elongating") for name in self._starter.subtypes)
+
     def __str__(self) -> str:
         core = ",".join(str(component) for component in self._components)
         return f"[{core}]"
@@ -437,6 +443,8 @@ class Module:
     def get_monomer(self, base: str = "", fallback: bool = False) -> str:  # pylint: disable=too-many-branches
         """ Builds a monomer including modifications from the given base. """
         state: List[str] = []
+        if self.is_non_elongating():
+            return ""
         if self.is_trans_at() and not base:
             base = "mal"
 
