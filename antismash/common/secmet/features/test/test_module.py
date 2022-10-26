@@ -66,7 +66,8 @@ class TestModule(unittest.TestCase):
     def test_detailed_biopython_conversion(self):
         expected_qualifiers = {"domains", "locus_tags", "complete", "starter_module",
                                "final_module", "monomer_pairings"}
-        original = create_module(starter=True, final=True, complete=True, iterative=True)
+        original = create_module(starter=True, final=True, complete=True, iterative=True,
+                                 non_elongating=True)
         original.add_monomer("from", "to")
         bio = original.to_biopython()
         assert set(bio[0].qualifiers.keys()).issuperset(expected_qualifiers)
@@ -87,6 +88,7 @@ class TestModule(unittest.TestCase):
         assert final.is_starter_module()
         assert final.is_final_module()
         assert final.is_iterative()
+        assert final.is_non_elongating()
         assert final.monomers == original.monomers
         assert final.is_complete()
         assert final.location == original.location
@@ -148,6 +150,11 @@ class TestModule(unittest.TestCase):
         assert not create_module().is_iterative()
         assert create_module(iterative=True).is_iterative()
         assert not create_module(iterative=False).is_iterative()
+
+    def test_non_elongating(self):
+        assert not create_module().is_non_elongating()
+        assert create_module(non_elongating=True).is_non_elongating()
+        assert not create_module(non_elongating=False).is_non_elongating()
 
     def test_cross_gene(self):
         module = create_module()
