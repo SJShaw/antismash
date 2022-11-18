@@ -199,6 +199,7 @@ class SimpleModule:
     cds_position: int
     polymer: str = ""
     iterative: bool = False
+    non_elongating: bool = False
 
     def to_json(self) -> Dict[str, Any]:
         """ Returns drawing-relevant JSON for the instance"""
@@ -207,6 +208,7 @@ class SimpleModule:
             "complete": self.complete,
             "iterative": self.iterative,
             "polymer": self.polymer,
+            "nonElongating": self.non_elongating,
         }
 
 
@@ -256,7 +258,9 @@ def _gen_js_data_for_candidate(record: Record, result: CandidateClusterPredictio
             profile_name = hit_by_domain_by_cds[dom.locus_tag][dom].hit_id
             domains.append(build_domain_json(profile_name, dom, inactive))
             domains_in_modules_by_cds[dom.locus_tag].add(dom)
-        polymer = module.get_substrate_monomer_pairs()[0][1] if module.is_complete() else ""
+        polymer = ""
+        if module.is_complete() and not module.is_non_elongating():
+            polymer = module.get_substrate_monomer_pairs()[0][1]
 
         # if not all of the parent CDS features of this module are in the candidate, it's not complete
         contained = list(filter(lambda parent: parent in cds_positions, module.parent_cds_names))
@@ -268,7 +272,7 @@ def _gen_js_data_for_candidate(record: Record, result: CandidateClusterPredictio
             name = domains[-1]["cds"]
 
         modules.append(SimpleModule(domains, complete, cds_positions[name],
-                                    polymer, module.is_iterative()))
+                                    polymer, module.is_iterative(), module.is_non_elongating()))
 
     extras = []
     for name in order:
