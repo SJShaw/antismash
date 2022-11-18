@@ -175,7 +175,9 @@ def _build_module_js(module: Module, cds: CDSFeature, match_ids: dict[tuple[str,
                      match_gen: Iterator[str]) -> JSONModule:
     """ Builds and returns a JSONModule isntance to match the given module """
     monomer = ""
-    if module.monomers:
+    if module.is_non_elongating():
+        monomer = "non-elong"
+    elif module.monomers:
         monomer = module.monomers[0][1]
         if monomer.endswith("pk"):
             monomer = monomer[:-2] + "?"
