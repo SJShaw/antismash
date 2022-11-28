@@ -438,6 +438,122 @@ class TestRuleExtenders(unittest.TestCase):
                 assert cds.gene_function == cds.gene_function.OTHER
 
 
+class TestClusterDetection(unittest.TestCase):
+    def setUp(self):
+        self.results_by_id = {
+            "GENE_1": [
+                FakeHSPHit("left", "GENE_1", 0, 10, 50, 0),
+            ],
+            "GENE_2": [
+                FakeHSPHit("mid1", "GENE_2", 0, 10, 50, 0),
+                FakeHSPHit("mid2", "GENE_2", 0, 10, 50, 0),
+            ],
+            "GENE_3": [
+                FakeHSPHit("right", "GENE_3", 0, 10, 50, 0)
+            ],
+        }
+        self.feature_by_id = {
+            "GENE_1": DummyCDS(1000, 2000, locus_tag="GENE_1"),
+            "GENE_2": DummyCDS(5000, 6000, locus_tag="GENE_2"),
+            "GENE_3": DummyCDS(9000, 10000, locus_tag="GENE_3"),
+        }
+
+        self.test_names = {"left", "mid1", "mid2", "right"}
+
+        self.category = "test-cat"
+        self.categories = {self.category}
+
+        self.record = Record()
+        self.record._record.seq = Seq("A" * 10000)
+        for feature in self.feature_by_id.values():
+            self.record.add_cds_feature(feature)
+
+    def tearDown(self):
+        # clear out any leftover config adjustments
+        destroy_config()
+
+    def build_rule(self, name, conditions, cutoff=5, neighbourhood=0):
+        return rule_parser.Parser(" ".join([
+            "RULE", name,
+            "CATEGORY", self.category,
+            "CUTOFF", str(cutoff),
+            "NEIGHBOURHOOD", str(neighbourhood),
+            "CONDITIONS", conditions,
+        ]), self.test_names, self.categories).rules[0]
+
+    def test_truncated_not_right(self):
+        rules = [self.build_rule("test-not", "left and mid1 and not right")]
+        types, hits = hmm_detection.apply_cluster_rules(self.record, self.results_by_id, rules)
+        assert hits == {
+            "test-not": {"GENE_1", "GENE_2"},
+        }
+        rules_by_name = {rule.name: rule for rule in rules}
+        clusters = hmm_detection.find_protoclusters(self.record, hits, rules_by_name)
+        assert len(clusters) == 1
+        assert clusters[0].core_location.start == 1000
+        assert clusters[0].core_location.end == 6000
+
+    def test_truncated_not_left(self):
+        rules = [self.build_rule("test-not", "not left and mid1 and right")]
+        types, hits = hmm_detection.apply_cluster_rules(self.record, self.results_by_id, rules)
+        assert hits == {
+            "test-not": {"GENE_2", "GENE_3"},
+        }
+        rules_by_name = {rule.name: rule for rule in rules}
+        clusters = hmm_detection.find_protoclusters(self.record, hits, rules_by_name)
+        assert len(clusters) == 1
+        assert clusters[0].core_location.start == 5000
+        assert clusters[0].core_location.end == 10000
+
+    def test_truncated_not_left_cds(self):
+        rules = [self.build_rule("test-not", "not left and cds(mid1 and mid2) and right", cutoff=3)]
+        types, hits = hmm_detection.apply_cluster_rules(self.record, self.results_by_id, rules)
+        assert hits == {
+            "test-not": {"GENE_2", "GENE_3"},
+        }
+        rules_by_name = {rule.name: rule for rule in rules}
+        clusters = hmm_detection.find_protoclusters(self.record, hits, rules_by_name)
+        assert len(clusters) == 1
+        assert clusters[0].core_location.start == 5000
+        assert clusters[0].core_location.end == 10000
+
+    def test_not_possible(self):
+        rules = [self.build_rule("test-not", "left and not mid1 and right")]
+        types, hits = hmm_detection.apply_cluster_rules(self.record, self.results_by_id, rules)
+        assert not hits
+        assert not types
+
+    def test_simple_and_right(self):
+        rules = [self.build_rule("test-and", "mid1 and right")]
+        types, hits = hmm_detection.apply_cluster_rules(self.record, self.results_by_id, rules)
+        assert hits == {
+            "test-and": {"GENE_2", "GENE_3"},
+        }
+        rules_by_name = {rule.name: rule for rule in rules}
+        clusters = hmm_detection.find_protoclusters(self.record, hits, rules_by_name)
+        assert len(clusters) == 1
+        assert clusters[0].core_location.start == 5000
+        assert clusters[0].core_location.end == 10000
+
+    def test_simple_and_left(self):
+        rules = [self.build_rule("test-and", "left and mid1")]
+        types, hits = hmm_detection.apply_cluster_rules(self.record, self.results_by_id, rules)
+        assert hits == {
+            "test-and": {"GENE_1", "GENE_2"},
+        }
+        rules_by_name = {rule.name: rule for rule in rules}
+        clusters = hmm_detection.find_protoclusters(self.record, hits, rules_by_name)
+        assert len(clusters) == 1
+        assert clusters[0].core_location.start == 1000
+        assert clusters[0].core_location.end == 6000
+
+    def test_not_possible(self):
+        rules = [self.build_rule("test-not", "left and not mid1")]
+        types, hits = hmm_detection.apply_cluster_rules(self.record, self.results_by_id, rules)
+        assert not hits
+        assert not types
+
+
 class TestSignatureFile(unittest.TestCase):
     def test_details(self):
         data_dir = path.get_full_path(os.path.dirname(__file__), 'data')

@@ -501,7 +501,10 @@ class Conditions:
         matching: Set[str] = set()
         met = False
         ancillary_hits: Dict[str, Set[str]] = defaultdict(set)
-        for sub_result in sub_results:
+        for sub, sub_result in zip(self.operands, sub_results):
+            # short cut to failure for an active negative
+            if not sub_result.met and sub.negated:
+                return ConditionMet(False)
             matching |= sub_result.matches
             met |= sub_result.met
             for name, anc_hits in sub_result.ancillary_hits.items():
@@ -651,7 +654,7 @@ class CDSCondition(Conditions):
         # start with the current cds (and end if local_only or satisifed)
         if local_only or satisfied_internally:
             return ConditionMet(xor(self.negated, satisfied_internally.met), satisfied_internally)
-
+        return ConditionMet(self.negated)
         results = satisfied_internally.met
         # negative matches must also ensure all neighbours are negative
         start_feature = details.features_by_id[details.cds]
@@ -660,8 +663,10 @@ class CDSCondition(Conditions):
                 continue
             if not details.in_range(start_feature.location, feature.location):
                 continue
-            results = results or super().are_subconditions_satisfied(details.just_cds(cds), local_only=True).met
-
+            satisfied = super().are_subconditions_satisfied(details.just_cds(cds), local_only=True)
+            results = results or satisfied.met
+            if satisfied.met:
+                matches[cds] = satisfied.matches
         return ConditionMet(xor(results, self.negated))
 
     def get_hit_string(self) -> str:
@@ -701,7 +706,7 @@ class SingleCondition(Conditions):
             other_possibilities = [res.query_id for res in other_hits]
             if self.name in other_possibilities:
                 # a positive match, so we can exit early
-                return ConditionMet(not self.negated)
+                return ConditionMet(not self.negated, ancillary_hits={other: {self.name}})
 
         # if negated and we failed to find anything, that's a good thing
         return ConditionMet(self.negated)
