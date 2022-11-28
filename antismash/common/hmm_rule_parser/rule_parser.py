@@ -654,8 +654,9 @@ class CDSCondition(Conditions):
         # start with the current cds (and end if local_only or satisifed)
         if local_only or satisfied_internally:
             return ConditionMet(xor(self.negated, satisfied_internally.met), satisfied_internally)
-        return ConditionMet(self.negated)
         results = satisfied_internally.met
+        if not results:
+            return ConditionMet(self.negated)
         # negative matches must also ensure all neighbours are negative
         start_feature = details.features_by_id[details.cds]
         for cds, feature in details.features_by_id.items():
@@ -665,8 +666,6 @@ class CDSCondition(Conditions):
                 continue
             satisfied = super().are_subconditions_satisfied(details.just_cds(cds), local_only=True)
             results = results or satisfied.met
-            if satisfied.met:
-                matches[cds] = satisfied.matches
         return ConditionMet(xor(results, self.negated))
 
     def get_hit_string(self) -> str:
