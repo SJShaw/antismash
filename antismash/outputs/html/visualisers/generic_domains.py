@@ -14,7 +14,7 @@ from antismash.common.hmmer import HmmerResults
 from antismash.common.html_renderer import HTMLSections, FileTemplate
 from antismash.common.layers import OptionsLayer, RecordLayer, RegionLayer
 from antismash.common.secmet import PFAMDomain, Record, Region
-from antismash.detection import cluster_hmmer, full_hmmer, tigrfam
+from antismash.detection import cluster_hmmer, full_hmmer, tigrfam, rulevis
 from antismash.outputs.html import js
 
 assert HmmerResults.schema_version == 2, "HmmerResults version mismatch, update required"
@@ -59,6 +59,7 @@ PFAM_TOOL = ToolInfo("Pfam", HELP + "Domains with a bold border have Gene Ontolo
 TOOLS = {
     tigrfam: ToolInfo("TIGRFAM", HELP,
                       url="https://www.ncbi.nlm.nih.gov/genome/annotation_prok/evidence/$ACCESSION"),
+    rulevis: ToolInfo("RuleVis", HELP),
 }
 
 
