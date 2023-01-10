@@ -35,7 +35,7 @@ class HMMerHit(ProfileHit):
     @classmethod
     def from_hsp(cls, hsp: HSP, seeds: int) -> "HMMerHit":
         """ Constructs an instance from an HSP """
-        return cls(hsp.hit_id, hsp.query_id, hsp.query_start, hsp.query_end, seeds, hsp.evalue, hsp.bitscore)
+        return cls(hsp.hit_id, hsp.query_id, hsp.hit_start, hsp.hit_end, seeds, hsp.evalue, hsp.bitscore)
 
 
 class DynamicHit(ProfileHit):
