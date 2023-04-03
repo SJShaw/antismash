@@ -18,7 +18,7 @@ from .minowa.base import MinowaPrediction
 from .nrpys import PredictorSVMResult
 from .pks_names import get_short_form
 from .at_analysis.at_analysis import ATPrediction
-
+from .name_mappings import SubstrateName, get_substrate_by_name
 
 UNKNOWN = "(unknown)"
 

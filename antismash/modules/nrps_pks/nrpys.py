@@ -17,7 +17,7 @@ from antismash.common.path import find_latest_database_version
 from antismash.config import ConfigType
 from antismash.detection.nrps_pks_domains import ModularDomain
 
-from .data_structures import Prediction
+from .data_structures import Prediction, SubstratePrediction
 from .name_mappings import get_substrate_by_name, SubstrateName
 from .signatures import get_a_dom_signatures
 
@@ -228,7 +228,7 @@ def _resolve_name_substrates(pred: nrpys.Prediction) -> tuple[str, list[Substrat
     return (name, substrates)
 
 
-class PredictorSVMResult(Prediction):
+class PredictorSVMResult(SubstratePrediction):
     """ Holds all the relevant results from nrpys for a domain """
     def __init__(self,
                  aa34: str,
@@ -255,7 +255,7 @@ class PredictorSVMResult(Prediction):
         self.single_amino = single_amino
         self.uncertain = aa34.count("-") >= 10
 
-    def _get_classification(self) -> list[SubstrateName]:
+    def get_substrate_classification(self) -> list[SubstrateName]:
         # comparing number of stach matches (n) to which category of SVM prediction
         # was made, and also to whether the SVM registered being outside of applicability domain
         # < = take stach, ^ = take SVM, & = take intersection of both, . = neither
@@ -317,7 +317,7 @@ class PredictorSVMResult(Prediction):
 
     def get_classification(self, as_norine: bool = False) -> list[str]:
         """ Get the classification """
-        substrates = self._get_classification()
+        substrates = self.get_substrate_classification()
 
         def mapper(substrate: SubstrateName) -> str:
             if as_norine:
