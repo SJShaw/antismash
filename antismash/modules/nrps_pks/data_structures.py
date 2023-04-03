@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Optional
 
 from antismash.common.html_renderer import Markup
 
+from .name_mappings import SubstrateName
+
 
 class Prediction:
     """ The base of all predictions for a domain. Must be provided with the method
@@ -38,6 +40,19 @@ class Prediction:
     def from_json(cls, json: Dict[str, Any]) -> "Prediction":
         """ Creates a Prediction from a JSON representation """
         raise NotImplementedError(f"Prediction subclass {cls} did not implement from_json()")
+
+
+class SubstratePrediction(Prediction):
+    """ Predictions for loaded substrates """
+
+    def get_substrate_classification(self) -> list[SubstrateName]:
+        """ Returns a list of equally likely predictions. If no prediction could
+            be made, an empty list is returned.
+        """
+        raise NotImplementedError(
+            f"SubstratePrediction subclass {type(self)} "
+            "did not implement 'get_substrate_classification()'"
+        )
 
 
 class SimplePrediction(Prediction):

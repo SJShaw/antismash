@@ -12,8 +12,7 @@ from typing import Dict, List, Tuple
 
 from antismash.common.secmet.features import CDSFeature
 
-from .data_structures import Prediction
-from .name_mappings import get_substrate_by_name
+from .data_structures import Prediction, SubstratePrediction, SubstrateName
 from .pks_names import get_short_form
 from .smiles_generator import get_all_smiles
 
@@ -54,7 +53,7 @@ def generate_nrps_consensus(results: Dict[str, Prediction]) -> str:
     """ Finds the most frequent prediction in the list of predictions that is
         also in the set of available smiles parts.
 
-        Defaults to 'nrp' in the case of no valid predictions or a tie.
+        Defaults to 'X' in the case of no valid predictions or a tie.
 
         Arguments:
             predictions: the list of predictions
@@ -63,25 +62,20 @@ def generate_nrps_consensus(results: Dict[str, Prediction]) -> str:
             the most frequent prediction
     """
     assert isinstance(results, dict), type(results)
-    hit_counts: Dict[str, int] = defaultdict(int)
+    hit_counts: Dict[SubstrateName, int] = defaultdict(int)
     for method, prediction in results.items():
         assert isinstance(method, str), method
-        assert isinstance(prediction, Prediction), prediction
-        if len(prediction.get_classification()) == 1:
-            best = prediction.get_classification(as_norine=True)[0]
-            if not set(best).issubset(ALLOWABLE_PREDICTION_CHARACTERS):
-                raise ValueError(f"{method} generated bad prediction string: {best}")
-            hit_counts[best] += 1
+        assert isinstance(prediction, SubstratePrediction), prediction
+        substrates = prediction.get_substrate_classification()
+        for substrate in substrates:
+            hit_counts[substrate] += 1
 
-    consensus = "X"
     # only really care about the first two for checking if it was a tie
-    best_hits = sorted(((count, name) for name, count in hit_counts.items()), reverse=True)[:2]
+    best_hits = sorted(((count, substrate) for substrate, count in hit_counts.items()), reverse=True)[:2]
     # if there is only one hit or the best hit isn't tie, use it
     if len(best_hits) == 1 or (best_hits and len({count for count, _ in best_hits}) != 1):
-        consensus = get_substrate_by_name(best_hits[0][1]).norine
-    if consensus.lower() not in get_all_smiles():
-        consensus = "X"
-    return consensus
+        return best_hits[0][1].short
+    return "X"
 
 
 def calculate_consensus_prediction(cds_features: List[CDSFeature], results: Dict[str, Dict[str, Prediction]]
