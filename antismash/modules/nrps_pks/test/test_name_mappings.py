@@ -33,3 +33,16 @@ class TestNameMappings(unittest.TestCase):
             counts[substrate.short] += 1
 
         assert len(self.known) == len(short_names), [(name, count) for name, count in counts.items() if count > 1]
+
+    def test_values(self) -> None:
+        norine_to_smiles = {}
+        for sub in self.known:
+            assert sub.long
+            assert sub.short
+            assert sub.norine
+            assert sub.smiles is None or sub.smiles  # if set, it can't be empty
+            if sub.norine not in ["X", "pk"]:
+                assert sub.smiles
+                if sub.norine not in norine_to_smiles:
+                    norine_to_smiles[sub.norine] = sub.smiles
+                assert norine_to_smiles[sub.norine] == sub.smiles, sub.norine

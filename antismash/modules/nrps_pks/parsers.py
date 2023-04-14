@@ -36,10 +36,9 @@ def calculate_individual_consensus(predictions: List[str]) -> str:
     for pred in set(predictions):
         count = predictions.count(pred)
         # for the purposes of smiles
-        smiles_equivalent = pred
         if "mmal" in pred:
-            smiles_equivalent = "Me-" + pred.replace("mmal", "mal")
-        if smiles_equivalent.lower() not in get_all_smiles():
+            pred = "Me-" + pred.replace("mmal", "mal")
+        if pred.lower() not in get_all_smiles():
             continue
         if count > 0 and count > highest_count:
             best = pred
