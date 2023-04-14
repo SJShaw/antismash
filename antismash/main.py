@@ -227,7 +227,7 @@ def run_detection(record: Record, options: ConfigType,
         run_module(record, module, options, module_results, timings)
         results = module_results.get(module.__name__)
         if results:
-            assert isinstance(results, ModuleResults)
+            assert isinstance(results, ModuleResults), f"{module.NAME}, {type(results)}"
             logging.debug("Adding detection results from %s to record", module.__name__)
             results.add_to_record(record)
 
