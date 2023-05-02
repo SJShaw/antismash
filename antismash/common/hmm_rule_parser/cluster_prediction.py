@@ -669,7 +669,7 @@ def detect_protoclusters_and_signatures(record: Record, signature_file: str, see
                              )
 
     # gather dynamic hits and merge them with HMMer results
-    dynamic_results = find_dynamic_hits(record, list(dynamic_profiles.values()))
+    dynamic_results = find_dynamic_hits(record, list(dynamic_profiles.values()), results_by_id)
     for name, dynamic_hits in dynamic_results.items():
         if name not in results_by_id:
             results_by_id[name] = []
@@ -727,18 +727,20 @@ def get_sequence_counts(details_file: str) -> Dict[str, int]:
     return result
 
 
-def find_dynamic_hits(record: Record, dynamic_profiles: List[DynamicProfile]) -> Dict[str, List[DynamicHit]]:
+def find_dynamic_hits(record: Record, dynamic_profiles: List[DynamicProfile],
+                      hmmer_hits: Dict[str, List[ProfileHit]]) -> Dict[str, List[DynamicHit]]:
     """ Finds hits for dynamic profiles
 
     Arguments:
         record: the Record to search
         dynamic_profiles: the dynamic profiles to find hits with
+        hmmer_hits: existing HMMer profile hits for use in dynamic profiles
 
     Returns:
         a dictionary mapping CDS name to list of DynamicHit
     """
     results: Dict[str, List[DynamicHit]] = defaultdict(list)
     for profile in dynamic_profiles:
-        for name, hits in profile.find_hits(record).items():
+        for name, hits in profile.find_hits(record, hmmer_hits).items():
             results[name].extend(hits)
     return results
