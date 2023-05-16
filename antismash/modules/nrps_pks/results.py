@@ -272,6 +272,9 @@ class NRPS_PKS_Results(ModuleResults):
             for module in cds_feature.modules:
                 if not module.is_complete():
                     continue
+                # only the primary CDS should annotate modules, to avoid duplication
+                if module.parent_cds_names[0] != cds_feature.get_name():
+                    continue
                 substrate = ""
                 for module_domain in module.domains:
                     consensus = self.consensus.get(module_domain.get_name())
