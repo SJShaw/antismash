@@ -180,7 +180,7 @@ class Component:
 
     def is_loader(self) -> bool:
         """ Returns True if the component can function as a loader domain """
-        return self.is_acyltransferase() or self.is_adenylation()
+        return self.is_acyltransferase() or self.is_adenylation() or self.label == "CAL_domain"
 
     def is_modification(self) -> bool:
         """ Returns True if the component can function as a modification domain """
