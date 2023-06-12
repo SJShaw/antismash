@@ -273,7 +273,7 @@ def run_module(record: Record, module: AntismashModule, options: ConfigType,
     start = time.time()
     results = module.run_on_record(record, results, options)
     duration = time.time() - start
-
+    x = 3
     assert isinstance(results, ModuleResults), f"{module.__name__} returned {type(results)}"
     module_results[module.__name__] = results
     timings[module.__name__] = duration
