@@ -459,7 +459,8 @@ class ModuleArgs(_SimpleArgs):
         return name, dest
 
 
-def build_parser(from_config_file: bool = False, modules: List[AntismashModule] = None) -> AntismashParser:
+def build_parser(from_config_file: bool = False, modules: List[AntismashModule] = None,
+                 parser_class: type[AntismashParser] = None) -> AntismashParser:
     """ Constructs an AntismashParser with all the default options antismash
         requires for proper operation, along with any added by the provided
         modules.
@@ -469,10 +470,16 @@ def build_parser(from_config_file: bool = False, modules: List[AntismashModule] 
                                 @file
             modules: a list of modules/objects implementing get_arguments() for
                         construction of the arguments themselves
+            parser_class: an optional subclass of AntismashParser to use instead
+                          of the default
 
         Returns:
             an AntismashParser instance with options for all provided modules
     """
+    if parser_class is None:
+        parser_class = AntismashParser
+    if not issubclass(parser_class, AntismashParser):
+        raise TypeError(f"custom parser must be a subclass of {AntismashParser}, not {parser_class}")
     parents = [help_options(), basic_options(), output_options(), advanced_options(),
                debug_options()]
     minimal = specific_debugging(modules)
@@ -482,9 +489,9 @@ def build_parser(from_config_file: bool = False, modules: List[AntismashModule] 
         parents.extend(module.get_arguments() for module in modules)
 
     if from_config_file:
-        parser = AntismashParser(parents=parents, fromfile_prefix_chars="@")
+        parser = parser_class(parents=parents, fromfile_prefix_chars="@")
     else:
-        parser = AntismashParser(parents=parents)
+        parser = parser_class(parents=parents)
 
     # positional arguments
     parser.add_argument('sequences',

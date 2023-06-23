@@ -58,19 +58,22 @@ def get_version() -> str:
 antismash.config.args.ANTISMASH_VERSION = get_version()
 
 
-def main(args: List[str]) -> int:
+def main(args: List[str], custom_parser: type[antismash.config.args.AntismashParser] = None) -> int:
     """ The entrypoint of antiSMASH as if it was on the command line
 
         Arguments:
             args: a list of args as would be given on the command line
                     e.g. ["inputfile", "--minimal", "--enable-nrps_pks"]
+            custom_parser: an optional AntismashParser subclass to use instead
+                           of the default
 
         Returns:
             zero if successful, non-zero otherwise
 
     """
     all_modules = antismash.get_all_modules()
-    parser = antismash.config.args.build_parser(from_config_file=True, modules=all_modules)
+    parser = antismash.config.args.build_parser(from_config_file=True, modules=all_modules,
+                                                parser_class=custom_parser)
 
     # if --help, show help texts and exit
     if set(args).intersection({"-h", "--help", "--help-showall"}):

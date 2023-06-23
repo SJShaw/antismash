@@ -4,7 +4,7 @@
 # for test files, silence irrelevant and noisy pylint warnings
 # pylint: disable=use-implicit-booleaness-not-comparison,protected-access,missing-docstring
 
-from argparse import ArgumentError, Namespace
+from argparse import ArgumentParser, ArgumentError, Namespace
 import os
 import unittest
 from unittest.mock import patch
@@ -111,6 +111,25 @@ class TestConfig(unittest.TestCase):
         assert len(config) == 0
         with self.assertRaises(AttributeError):
             assert config.executables
+
+    def test_default_parser(self):
+        assert type(args.build_parser()) is args.AntismashParser
+
+    def test_custom_parser(self):
+        class Custom(args.AntismashParser):
+            pass
+
+        parser = args.build_parser(parser_class=Custom)
+        assert isinstance(parser, args.AntismashParser)
+        assert type(parser) is Custom
+
+    def test_invalid_custom_parser(self):
+        class Custom(ArgumentParser):
+            pass
+
+        for parser in [Custom, int]:
+            with self.assertRaises(TypeError):
+                args.build_parser(parser_class=Custom)
 
 
 class TestExecutableArg(unittest.TestCase):
