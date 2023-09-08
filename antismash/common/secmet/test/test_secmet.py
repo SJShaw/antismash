@@ -482,6 +482,45 @@ class TestCDSFetchByLocation(unittest.TestCase):
         loc = FeatureLocation(110, 140)
         assert self.func(loc, with_overlapping=False) == [inner]
 
+    def test_multi_part(self):
+        self.record._record.annotations = {"topology": "circular"}
+        assert self.record.is_circular()
+        location = CompoundLocation([FeatureLocation(0, 50), FeatureLocation(80, 140)])
+        assert self.func(location, with_overlapping=False) == list(self.record.get_cds_features())
+
+        location = CompoundLocation([FeatureLocation(0, 5), FeatureLocation(80, 140)])
+        assert self.func(location, with_overlapping=True) == [self.record.get_cds_features()[1]]
+
+    def test_multi_part_reverse(self):
+        self.record._record.annotations = {"topology": "circular"}
+        assert self.record.is_circular()
+        location = CompoundLocation([FeatureLocation(80, 140), FeatureLocation(0, 50)])
+        assert self.func(location, with_overlapping=False) == list(self.record.get_cds_features())[::-1]
+
+        location = CompoundLocation([FeatureLocation(0, 5), FeatureLocation(80, 140)])
+        assert self.func(location, with_overlapping=True) == [self.record.get_cds_features()[1]]
+
+    def test_cross_origin_cds(self):
+        self.record._record.annotations = {"topology": "circular"}
+        assert self.record.is_circular()
+        self.record._cds_features.clear()
+        self.record._cds_by_location.clear()
+        self.record._cds_by_name.clear()
+        cds = CDSFeature(CompoundLocation([FeatureLocation(120, 140, 1), FeatureLocation(0, 10, 1)]),
+                         locus_tag="test", translation="A")
+        self.record.add_cds_feature(cds)
+        self.record.add_cds_feature(DummyCDS(30, 40, strand=-1))
+
+        location = CompoundLocation([FeatureLocation(0, 50), FeatureLocation(80, 140)])
+        assert cds.is_contained_by(location)
+        assert self.func(location, with_overlapping=False) == list(self.record.get_cds_features())
+
+        location = CompoundLocation([FeatureLocation(80, 140), FeatureLocation(0, 50)])
+        assert self.func(location, with_overlapping=False) == list(self.record.get_cds_features())
+
+        location = CompoundLocation([FeatureLocation(0, 35), FeatureLocation(80, 140)])
+        assert self.func(location, with_overlapping=False) == [cds]
+
 
 class TestClusterManipulation(unittest.TestCase):
     def setUp(self):

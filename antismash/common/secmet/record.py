@@ -483,7 +483,7 @@ class Record:
         features.extend(self.get_sources())
         return features
 
-    def get_cds_features_within_location(self, location: FeatureLocation,
+    def get_cds_features_within_location(self, location: Location,
                                          with_overlapping: bool = False) -> List[CDSFeature]:
         """ Returns all CDS features within the given location
 
@@ -495,6 +495,17 @@ class Record:
             Returns:
                 a list of CDSFeatures, ordered by earliest position in feature location
         """
+        if len(location.parts) > 1:
+            features = []
+            for part in location.parts:
+                # always allow overlapping to start with, since a CDS might also have multiple parts
+                found = self.get_cds_features_within_location(part, with_overlapping=True)
+                features.extend(found)
+            # now that all overlaps are found, if they must be contained, trim them here
+            if not with_overlapping:
+                features = list(filter(lambda f: f.is_contained_by(location), features))
+            return features
+
         def find_start_in_list(location: FeatureLocation, features: List[CDSFeature],
                                include_overlaps: bool) -> int:
             """ Find the earliest feature that starts before the location
