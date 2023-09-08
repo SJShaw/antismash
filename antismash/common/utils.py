@@ -10,7 +10,6 @@ from typing import Dict, List, Optional
 
 import Bio.Data.IUPACData
 from Bio.SeqUtils.ProtParam import ProteinAnalysis
-from Bio.SeqFeature import FeatureLocation
 
 from .fasta import read_fasta
 from .secmet import Feature, Record
@@ -90,15 +89,16 @@ def distance_to_pfam(record: Record, query: Feature, hmmer_profiles: List[str]) 
             or -1 if no gene matching was found
     """
     max_range = 40000
-    search_range = FeatureLocation(query.location.start - max_range,
-                                   query.location.end + max_range)
+    if record.is_circular():
+        max_range = min(max_range, len(record) // 2)
+    search_range = record.extend_location(query.location, max_range)
     close_cds_features = record.get_cds_features_within_location(search_range, with_overlapping=True)
 
     # For nearby CDS features, check if they have hits to the pHMM
     profiles = set(hmmer_profiles)
     closest_distance = -1
     for cds in close_cds_features:
-        if cds.sec_met is None:
+        if not cds.sec_met:
             continue
         if set(cds.sec_met.domain_ids).intersection(profiles):
             distance = record.get_distance_between_features(query, cds)
