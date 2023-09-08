@@ -64,6 +64,9 @@ class Protocluster(CDSCollection):
     def __str__(self) -> str:
         return f"Protocluster({self.location}, product={self.product})"
 
+    def __repr__(self) -> str:
+        return str(self)
+
     def get_protocluster_number(self) -> int:
         """ Returns the protoclusters's numeric ID, only guaranteed to be consistent
             when the same protoclusters are defined in the parent record

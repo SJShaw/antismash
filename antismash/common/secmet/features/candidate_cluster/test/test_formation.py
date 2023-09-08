@@ -4,13 +4,26 @@
 # for test files, silence irrelevant and noisy pylint warnings
 # pylint: disable=use-implicit-booleaness-not-comparison,protected-access,missing-docstring
 
+from functools import partial
 import unittest
 
-from antismash.common.secmet import FeatureLocation
-from antismash.common.secmet.features import CandidateCluster
+from antismash.common.secmet.features import CandidateCluster, Protocluster
 from antismash.common.secmet.features.candidate_cluster import (
     create_candidates_from_protoclusters as creator,
 )
+from antismash.common.secmet.features.candidate_cluster.formation import (
+    _find_cross_origin_interleaved as find_origin_interleaved,
+    _find_hybrids as find_hybrids,
+    _find_interleaved as find_interleaved,
+    _find_neighbouring as find_neighbouring,
+    _merge_sets as merge,
+)
+from antismash.common.secmet.locations import (
+    CompoundLocation,
+    FeatureLocation,
+    location_bridges_origin,
+)
+from antismash.common.secmet.test.helpers import DummyCandidateCluster, DummyCDS
 
 from .test_candidate_cluster import create_cds, create_cluster
 
@@ -23,7 +36,7 @@ class TestCreation(unittest.TestCase):
         created = creator([create_cluster(3, 8, 71, 76, 'a')])
         print(created)
         assert len(created) == 1
-        assert created[0].location == FeatureLocation(3, 76)
+        assert created[0].location == FeatureLocation(3, 76, 1)
         assert created[0].kind == CandidateCluster.kinds.SINGLE
 
     def test_creation_neighbours(self):
@@ -32,8 +45,7 @@ class TestCreation(unittest.TestCase):
         created = creator([cluster, extra_cluster])
         print(created)
         assert len(created) == 3
-        expected_location = FeatureLocation(cluster.location.start,
-                                            extra_cluster.location.end)
+        expected_location = FeatureLocation(cluster.location.start, extra_cluster.location.end, 1)
         assert created[0].kind == CandidateCluster.kinds.NEIGHBOURING and created[0].location == expected_location
         assert created[1].kind == CandidateCluster.kinds.SINGLE and created[1].location == cluster.location
         assert created[2].kind == CandidateCluster.kinds.SINGLE and created[2].location == extra_cluster.location
@@ -51,7 +63,7 @@ class TestCreation(unittest.TestCase):
         assert len(created) == 1
         candidate_cluster = created[0]
         assert candidate_cluster.kind == CandidateCluster.kinds.INTERLEAVED
-        assert candidate_cluster.location == FeatureLocation(3, 170)
+        assert candidate_cluster.location == FeatureLocation(3, 170, 1)
 
     def test_creation_hybrid(self):
         cluster = create_cluster(3, 8, 71, 76, 'a')
@@ -67,7 +79,7 @@ class TestCreation(unittest.TestCase):
         assert len(created) == 1
         candidate_cluster = created[0]
         assert candidate_cluster.kind == CandidateCluster.kinds.CHEMICAL_HYBRID
-        assert candidate_cluster.location == FeatureLocation(3, 170)
+        assert candidate_cluster.location == FeatureLocation(3, 170, 1)
 
     def test_creation_mixed(self):
         cluster = create_cluster(3, 8, 71, 76, 'a')
@@ -85,23 +97,23 @@ class TestCreation(unittest.TestCase):
         print(created)
 
         assert len(created) == 5
-        assert created[0].location == FeatureLocation(3, 270)
+        assert created[0].location == FeatureLocation(3, 270, 1)
         assert created[0].kind == CandidateCluster.kinds.NEIGHBOURING
         assert created[0].protoclusters == (cluster, neighbour_cluster, hybrid_cluster, overlap_cluster)
 
-        assert created[1].location == FeatureLocation(3, 180)
+        assert created[1].location == FeatureLocation(3, 180, 1)
         assert created[1].kind == CandidateCluster.kinds.INTERLEAVED
         assert created[1].protoclusters == (cluster, hybrid_cluster, overlap_cluster)
 
-        assert created[2].location == FeatureLocation(3, 170)
+        assert created[2].location == FeatureLocation(3, 170, 1)
         assert created[2].kind == CandidateCluster.kinds.CHEMICAL_HYBRID
         assert created[2].protoclusters == (cluster, hybrid_cluster)
 
-        assert created[3].location == FeatureLocation(50, 270)
+        assert created[3].location == FeatureLocation(50, 270, 1)
         assert created[3].kind == CandidateCluster.kinds.SINGLE
         assert created[3].protoclusters == (neighbour_cluster,)
 
-        assert created[4].location == FeatureLocation(450, 600)
+        assert created[4].location == FeatureLocation(450, 600, 1)
         assert created[4].kind == CandidateCluster.kinds.SINGLE
         assert created[4].protoclusters == (isolated_cluster,)
 
@@ -120,11 +132,11 @@ class TestCreation(unittest.TestCase):
             created = creator([cluster, hybrid, contained, overlapping])
 
             assert len(created) == 2
-            assert created[0].location == FeatureLocation(3, 250)
+            assert created[0].location == FeatureLocation(3, 250, 1)
             assert created[0].kind == CandidateCluster.kinds.INTERLEAVED
             assert created[0].protoclusters == tuple(sorted([cluster, hybrid, contained, overlapping]))
 
-            assert created[1].location == FeatureLocation(3, 176)
+            assert created[1].location == FeatureLocation(3, 176, 1)
             assert created[1].kind == CandidateCluster.kinds.CHEMICAL_HYBRID
             assert created[1].protoclusters == (cluster, hybrid, contained)
 
@@ -154,19 +166,19 @@ class TestCreation(unittest.TestCase):
         created = creator(first_hybrid_clusters + second_hybrid_clusters + [single] + standalone)
 
         assert len(created) == 4
-        assert created[0].location == FeatureLocation(30, 430)
-        assert created[0].core_location == FeatureLocation(60, 410)
+        assert created[0].location == FeatureLocation(30, 430, 1)
+        assert created[0].core_location == FeatureLocation(60, 410, 1)
         assert created[0].kind == CandidateCluster.kinds.INTERLEAVED
         assert created[0].protoclusters == tuple(first_hybrid_clusters + second_hybrid_clusters + [single])
 
-        assert created[1].location == FeatureLocation(30, 180)
+        assert created[1].location == FeatureLocation(30, 180, 1)
         assert created[1].protoclusters == tuple(first_hybrid_clusters)
-        assert created[2].location == FeatureLocation(90, 310)
+        assert created[2].location == FeatureLocation(90, 310, 1)
         assert created[2].protoclusters == tuple(second_hybrid_clusters)
         for cand in created[1:3]:
             assert cand.kind == CandidateCluster.kinds.CHEMICAL_HYBRID
 
-        assert created[3].location == FeatureLocation(1000, 1600)
+        assert created[3].location == FeatureLocation(1000, 1600, 1)
         assert created[3].kind == CandidateCluster.kinds.CHEMICAL_HYBRID
 
     def test_interleaving_order(self):
@@ -177,11 +189,11 @@ class TestCreation(unittest.TestCase):
         created = creator(clusters)
         assert len(created) == 3
         assert created[0].kind == CandidateCluster.kinds.NEIGHBOURING
-        assert created[0].location == FeatureLocation(1000, 4000)
+        assert created[0].location == FeatureLocation(1000, 4000, 1)
         assert created[1].kind == CandidateCluster.kinds.INTERLEAVED
-        assert created[1].location == FeatureLocation(1000, 1600)
+        assert created[1].location == FeatureLocation(1000, 1600, 1)
         assert created[2].kind == CandidateCluster.kinds.SINGLE
-        assert created[2].location == FeatureLocation(1050, 4000)
+        assert created[2].location == FeatureLocation(1050, 4000, 1)
 
     def test_contained_neighbours(self):
         # if a larger protocluster contains another entirely in its neighbourhood
@@ -262,3 +274,104 @@ class TestCreation(unittest.TestCase):
         assert created[0].products == ["a", "b", "c"]
         assert created[1].kind == CandidateCluster.kinds.SINGLE
         assert created[1].products == ["c"]
+
+
+class TestHelpers(unittest.TestCase):
+    def setUp(self):
+        self.first = create_cluster(800, 850, 900, 950, "first")
+        core = CompoundLocation([FeatureLocation(850, 1000), FeatureLocation(0, 100)])
+        surrounds = CompoundLocation([FeatureLocation(800, 1000), FeatureLocation(0, 200)])
+        self.core_over_origin = Protocluster(core, surrounds, "tool", "second", 50, 100, "rule")
+        self.isolated = create_cluster(400, 500, 600, 700, "isolated")
+        self.unassigned = [self.first, self.core_over_origin, self.isolated]
+
+    def test_hybrids(self):
+        shared_cds = DummyCDS(850, 900)
+
+        # no groups will form because definition CDSes aren't shared, despite overlaps
+        groups, leftovers = find_hybrids([self.first, self.core_over_origin])
+        assert not groups
+        assert leftovers
+
+        self.first._definition_cdses.add(shared_cds)
+        assert self.first.definition_cdses == {shared_cds}
+        self.core_over_origin._definition_cdses.add(shared_cds)
+        assert self.first.definition_cdses == self.core_over_origin.definition_cdses
+
+        # now that 1 and 2 share a core gene, a group will form
+        groups, leftovers = find_hybrids(self.unassigned)
+        assert len(groups) == 1
+        assert set(groups[0]) == {self.first, self.core_over_origin}
+        assert leftovers == [self.isolated]
+
+    def test_neighbouring(self):
+        neighbours = find_neighbouring(self.unassigned, [])
+        assert len(neighbours) == 1
+        assert set(neighbours[0]) == {self.first, self.core_over_origin}
+
+    def test_neighbouring_candidates(self):
+        extra = create_cluster(700, 750, 800, 850, "a")
+        candidates = [DummyCandidateCluster(clusters=[extra])]
+        neighbours = find_neighbouring(self.unassigned, candidates)
+        assert len(neighbours) == 1
+        assert set(neighbours[0]) == {extra, self.first, self.core_over_origin}
+
+    def test_neighbouring_cross_origin_candidates(self):
+        extra = create_cluster(700, 750, 800, 850, "extra")
+        neighbourhood_over_origin = create_cluster(0, 20, 50, 80, "extra_over")
+        # override the neighbourhood to extend over the origin
+        neighbourhood_over_origin.location = CompoundLocation([
+            FeatureLocation(980, 1000, 1),
+            FeatureLocation(0, 80, 1)
+        ])
+        candidates = [
+            DummyCandidateCluster(clusters=[self.core_over_origin]),
+            DummyCandidateCluster(clusters=[neighbourhood_over_origin])
+        ]
+        neighbours = find_neighbouring([self.first, self.isolated, extra], candidates)
+        assert len(neighbours) == 1
+        assert set(neighbours[0]) == {extra, self.first, self.core_over_origin, neighbourhood_over_origin}
+
+    def test_find_interleaved(self):
+        groups, leftovers = find_interleaved(self.unassigned, [])
+        assert len(groups) == 1
+        assert set(groups[0]) == {self.first, self.core_over_origin}
+        assert leftovers == [self.isolated]
+
+    def test_cross_origin_interleaved(self):
+        core = FeatureLocation(50, 100)
+        surrounds = CompoundLocation([FeatureLocation(950, 1000), FeatureLocation(0, 150)])
+        surrounds_over_origin = Protocluster(core, surrounds, "tool", "surrounds", 50, 100, "rule")
+        candidates = sorted([
+            DummyCandidateCluster(clusters=[surrounds_over_origin, self.core_over_origin]),
+            DummyCandidateCluster(clusters=[surrounds_over_origin]),
+        ])
+        assert candidates[0].crosses_origin() and location_bridges_origin(candidates[0].core_location)
+        assert candidates[1].crosses_origin() and not location_bridges_origin(candidates[1].core_location)
+        assert all(candidate.crosses_origin() for candidate in candidates)
+        existing = [{surrounds_over_origin}, {self.core_over_origin}]  # this will be updated
+        original = [set(group) for group in existing]
+        found = find_origin_interleaved(candidates, sorted([self.first, self.isolated]), existing, 1000)
+        assert len(found) == 1
+        assert found == {self.first}
+        assert existing != original
+        assert existing == [{surrounds_over_origin}, {self.core_over_origin},
+                            {surrounds_over_origin, self.core_over_origin, self.first}]
+
+    def test_merge(self):
+        make = partial(create_cluster, 50, 60, 120, 170)
+        # something that should not be merged
+        isolated = create_cluster(0, 5, 10, 15, "isolated")
+        # a pair of sets that should be merged, separated by the origin
+        shared_ab = make("shared_ab")
+        shared_ab.location = CompoundLocation([FeatureLocation(180, 200, 1), FeatureLocation(0, 30)])
+        a = create_cluster(15, 20, 40, 55, "a")  # pylint: disable=invalid-name
+        b = create_cluster(170, 175, 185, 190, "b")  # pylint: disable=invalid-name
+        # and an pair to merge that don't cross the origin
+        c = make("c")  # pylint: disable=invalid-name
+        cd = {c, make("d")}
+        de = {c, make("e")}
+        sets = [{a, shared_ab}, {isolated}, cd, de, {b, shared_ab}]
+        results = merge(sets)
+        results_as_sets = [set(clusters) for clusters in results]
+        assert results_as_sets == [{a, b, shared_ab}, {isolated}, cd.union(de)]

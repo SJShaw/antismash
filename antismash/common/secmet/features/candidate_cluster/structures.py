@@ -12,7 +12,12 @@ from Bio.SeqFeature import SeqFeature
 from ..cdscollection import CDSCollection
 from ..protocluster import Protocluster, SideloadedProtocluster
 from ..feature import FeatureLocation, Feature
-from ...locations import combine_locations
+from ...locations import (
+    CompoundLocation,
+    connect_locations,
+    get_max_coordinate,
+    location_bridges_origin,
+)
 
 T = TypeVar("T", bound="CandidateCluster")
 
@@ -58,7 +63,17 @@ class CandidateCluster(CDSCollection):
             assert isinstance(protocluster, Protocluster), type(protocluster)
         if not isinstance(kind, CandidateClusterKind):
             raise TypeError(f"argument 1 should be CandidateClusterKind, had {type(kind)}")
-        location = combine_locations(cluster.location for cluster in protoclusters)
+        locations = [cluster.location for cluster in protoclusters]
+        cross_origin = any(location_bridges_origin(location) for location in locations)
+        if cross_origin:
+            wrap_point = get_max_coordinate(locations)
+            location = connect_locations(locations, wrap_point=wrap_point)
+            assert location_bridges_origin(location), (locations, "->", location)
+        else:
+            location = connect_locations(locations)
+            assert not location_bridges_origin(location), (locations, "->", location)
+        if len(location.parts) > 1:
+            location = CompoundLocation(sorted(location.parts, key=lambda x: x.start, reverse=True))
         super().__init__(location, feature_type=CandidateCluster.FEATURE_TYPE, child_collections=protoclusters)
         self._protoclusters = protoclusters
         self._kind = kind
@@ -117,9 +132,17 @@ class CandidateCluster(CDSCollection):
             core locations
         """
         if not self._core_location:
-            first_core = min(proto.core_location.start for proto in self._protoclusters)
-            last_core = max(proto.core_location.end for proto in self._protoclusters)
-            self._core_location = FeatureLocation(first_core, last_core)
+            wrap_point: Optional[int] = None
+            full = [cluster.location for cluster in self._protoclusters]
+            if any(location_bridges_origin(location) for location in full):
+                wrap_point = get_max_coordinate(full)
+                cores = [proto.core_location for proto in self._protoclusters]
+                self._core_location = connect_locations(cores, wrap_point)
+            else:
+                start = min(cluster.core_location.start for cluster in self._protoclusters)
+                end = max(cluster.core_location.end for cluster in self._protoclusters)
+                self._core_location = FeatureLocation(start, end, 1)
+            cores = [p.core_location for p in self._protoclusters]
         return self._core_location
 
     def get_product_string(self) -> str:

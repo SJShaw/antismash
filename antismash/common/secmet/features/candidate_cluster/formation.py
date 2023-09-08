@@ -5,9 +5,17 @@
 """
 
 import bisect
-from typing import Iterable, List, Set, Tuple
+from typing import Iterable, List, Optional
 
-from ...locations import FeatureLocation, location_contains_other, locations_overlap
+from ...locations import (
+    CompoundLocation,
+    Location,
+    connect_locations,
+    get_max_coordinate,
+    location_contains_other,
+    location_bridges_origin,
+    locations_overlap,
+)
 from ..protocluster import Protocluster
 from .structures import CandidateCluster, CandidateClusterKind
 
@@ -99,8 +107,9 @@ def create_candidates_from_protoclusters(protoclusters: List[Protocluster]) -> L
     return sorted(candidates)  # again, reorder by location
 
 
-def _merge_sets(groups: Iterable[Set[Protocluster]]) -> List[List[Protocluster]]:
+def _merge_sets(groups: Iterable[set[Protocluster]]) -> list[list[Protocluster]]:
     """ Merges all overlapping sets into a larger set. All sets returned are disjoint. """
+    groups = [set(group) for group in groups]  # don't modify the inputs
     # once ordered by earliest start location, a single pass should be sufficient
     ordered = sorted(groups, key=lambda group: min(cluster.location.start for cluster in group))
     for i, first in enumerate(ordered[:-1]):
@@ -112,10 +121,10 @@ def _merge_sets(groups: Iterable[Set[Protocluster]]) -> List[List[Protocluster]]
             # merge into the earlier group and make the second unable to hit any other
             first.update(second)
             second.clear()
-    return [sorted(group) for group in ordered if group]
+    return [sorted(group) for group in ordered if group]  # remove any empty sets
 
 
-def _find_hybrids(clusters: List[Protocluster]) -> Tuple[List[List[Protocluster]], List[Protocluster]]:
+def _find_hybrids(clusters: list[Protocluster]) -> tuple[list[list[Protocluster]], list[Protocluster]]:
     """ Finds all chemical hybrid groupings within a sorted list of protoclusters """
     unassigned = set(clusters)
     clusters = sorted(clusters, key=lambda x: (x.core_location.start, x.core_location.end))
@@ -124,46 +133,124 @@ def _find_hybrids(clusters: List[Protocluster]) -> Tuple[List[List[Protocluster]
     groups = []
     for i, first in enumerate(clusters[:-1]):
         for second in clusters[i+1:]:
-            if not first.overlaps_with(second):
-                break
             if first.definition_cdses.intersection(second.definition_cdses):
                 groups.append({first, second})
                 unassigned.discard(first)
                 unassigned.discard(second)
+
+    # handle origin-crossing pairs
+    first = clusters[0]
+    second = clusters[-1]
+    if first is not second and first.definition_cdses.intersection(second.definition_cdses):
+        groups.append({first, second})
+        unassigned.discard(first)
+        unassigned.discard(second)
 
     # merge the pairs into larger groups
     merged_groups = _merge_sets(groups)
     # sort by core_location to ensure vastly different neighbourhood ranges don't cause issues
     clusters = sorted(unassigned, key=lambda x: x.core_location.start)
 
+    def update_if_contained(outer: Location, cluster: Protocluster) -> None:
+        if location_contains_other(outer, cluster.core_location):
+            group.append(cluster)
+            unassigned.discard(cluster)
+
     # then find any unassigned cluster that is fully contained by a hybrid group
+
+    # first find the wrapping point, since any cross-origin cluster does so at the origin
+    # if none exist, that's fine, since the process will be identical to a linear record
+    wrap_point: Optional[int] = None
+    if any(cluster.crosses_origin() for cluster in clusters):
+        wrap_point = get_max_coordinate([cluster.location for cluster in clusters])
+
+
     for group in merged_groups:
-        core = FeatureLocation(min(proto.core_location.start for proto in group),
-                               max(proto.core_location.end for proto in group))
-        index = max(0, bisect.bisect_left([cluster.core_location.start for cluster in clusters], core.start) - 1)
+        core = connect_locations([proto.core_location for proto in group], wrap_point=wrap_point)
+        start = bisect.bisect_left([cluster.core_location.parts[-1].start for cluster in clusters], core.start) - 1
+        index = max(0, start)
         for cluster in clusters[index:]:
             if cluster.location.start > core.end:
                 break
-            if location_contains_other(core, cluster.core_location):
-                group.append(cluster)
-                unassigned.discard(cluster)
-
+            update_if_contained(core, cluster)
+        if len(core.parts) > 1:
+            for cluster in clusters:
+                if cluster.location.start > core.parts[-1].end:
+                    break
+                update_if_contained(core, cluster)
     return [sorted(group) for group in merged_groups], sorted(unassigned)
 
 
-def _find_interleaved(clusters: List[Protocluster], candidates: List[CandidateCluster]
-                      ) -> Tuple[List[List[Protocluster]], List[Protocluster]]:
-    """ Finds all interleaved groups from combinations of existing candidates
-        and single protoclusters (both inputs must be sorted)
-    """
-    found = set()
+def _find_interleaved_candidates(candidates: list[CandidateCluster]) -> list[set[Protocluster]]:
+    """ Returns disjoint sets of candidates with any protoclusters that overlap core locations """
     groups = []
-
     # start with any interleaved candidates
     for i, candidate in enumerate(candidates[:-1]):
         for other_candidate in candidates[i+1:]:
             if locations_overlap(candidate.core_location, other_candidate.core_location):
                 groups.append(set(candidate.protoclusters + other_candidate.protoclusters))
+
+    # handle origin-crossing pairs
+    if len(candidates) > 1:
+        candidate = candidates[0]
+        other_candidate = candidates[-1]
+        if locations_overlap(candidate.core_location, other_candidate.core_location):
+            groups.append(set(candidate.protoclusters + other_candidate.protoclusters))
+    return groups
+
+
+def _find_cross_origin_interleaved(candidates: list[CandidateCluster], unassigned: list[Protocluster],
+                                   existing_groups: list[set[Protocluster]], wrap_point: int) -> set[Protocluster]:
+    """ Returns a set of protoclusters with cores that overlap with the given candidates,
+        adding any overlaps to the existing groups.
+    """
+    found: set[Protocluster] = set()
+    if not (unassigned and candidates):
+        return found
+
+    # it's possible that only the non-core areas cross the origin, in which case
+    # there's nothing to check
+    if not any(location_bridges_origin(candidate.core_location) for candidate in candidates):
+        return found
+
+    post_origin = []
+    pre_origin = []
+    for candidate in candidates:
+        if location_bridges_origin(candidate.core_location):
+            post_origin.append(candidate.core_location.parts[1])
+            pre_origin.append(candidate.core_location.parts[0])
+    wrap_point = get_max_coordinate(candidate.location for candidate in candidates)
+    post_core = connect_locations(post_origin, wrap_point)
+    pre_core = connect_locations(pre_origin, wrap_point)
+    # since a core location is known to exist that crosses the origin, make sure the above exist
+    assert post_core and pre_core
+    core = CompoundLocation([post_core, pre_core])
+    core_group: set[Protocluster] = set()
+    for candidate in candidates:
+        if candidate.crosses_origin():
+            core_group.update(candidate.protoclusters)
+    assert core_group
+    existing_groups.append(core_group)
+    for direction in [-1, 1]:
+        index = 0 if direction == 1 else -1  # don't check 0 twice, especially if it ends the loop early
+        cluster = unassigned[index]
+        while (abs(index) < len(unassigned)  # don't go out of bounds
+                and locations_overlap(cluster.core_location, core)  # don't go past disconnected clusters
+                and len(found) < len(unassigned)):  # avoid cases of whole-record overlaps being infinite
+            core_group.add(cluster)
+            found.add(cluster)
+            index += direction
+            cluster = unassigned[index]
+    return found
+
+
+def _find_interleaved(clusters: list[Protocluster], candidates: list[CandidateCluster],
+                      wrap_point: int = 0) -> tuple[list[list[Protocluster]], list[Protocluster]]:
+    """ Finds all interleaved groups from combinations of existing candidates
+        and single protoclusters (both inputs must be sorted)
+    """
+    found = set()
+    groups = _find_interleaved_candidates(candidates)
 
     # sort unassigned by core location, as that's the important part
     unassigned_by_core = sorted(clusters, key=lambda x: x.core_location.start)
@@ -188,20 +275,57 @@ def _find_interleaved(clusters: List[Protocluster], candidates: List[CandidateCl
                 groups.append(set(candidate.protoclusters + (cluster,)))
                 found.add(cluster)
 
+    # and origin-crossing combinations of unassigned and candidates
+    found.update(_find_cross_origin_interleaved(candidates, unassigned_by_core, groups, wrap_point=wrap_point))
+
     return _merge_sets(groups), sorted(set(clusters).difference(found))
 
 
-def _find_neighbouring(singles: List[Protocluster], candidates: List[CandidateCluster]) -> List[List[Protocluster]]:
-    """ Finds all neighbouring groups from combinations of existing candidates
-        and single protoclusters (both inputs must be sorted)
-    """
+def _find_neighbouring_candidates(candidates: list[CandidateCluster]) -> list[set[Protocluster]]:
+    """ Returns sets of candidates with overlapping locations """
     groups = []
     # candidates overlapping with candidates
     for i, first_candidate in enumerate(candidates[:-1]):
         for second_candidate in candidates[i+1:]:
             if not first_candidate.overlaps_with(second_candidate):
-                break
+                continue
             groups.append(set(first_candidate.protoclusters).union(set(second_candidate.protoclusters)))
+
+    # handle origin-crossing pairs
+    if len(candidates) > 1:
+        candidate = candidates[0]
+        i = -1
+        while 0 < i < len(candidates):
+            other_candidate = candidates[i]
+            if locations_overlap(candidate.location, other_candidate.location):
+                groups.append(set(candidate.protoclusters + other_candidate.protoclusters))
+            i += 1
+    return groups
+
+
+def _find_neighbouring_protoclusters(protoclusters: list[Protocluster]) -> list[set[Protocluster]]:
+    """ Returns sets of protoclusters with overlapping locations """
+    groups = []
+    for i, first_cluster in enumerate(protoclusters[:-1]):
+        for second_cluster in protoclusters[i+1:]:
+            if not first_cluster.overlaps_with(second_cluster):
+                continue
+            groups.append({first_cluster, second_cluster})
+
+    # again, origin-crossing needs to be handled between protoclusters
+    if len(protoclusters) > 1:
+        first_cluster = protoclusters[0]
+        second_cluster = protoclusters[-1]
+        if first_cluster is not second_cluster and first_cluster.overlaps_with(second_cluster):
+            groups.append({first_cluster, second_cluster})
+    return groups
+
+
+def _find_neighbouring(singles: list[Protocluster], candidates: list[CandidateCluster]) -> list[list[Protocluster]]:
+    """ Finds all neighbouring groups from combinations of existing candidates
+        and single protoclusters (both inputs must be sorted)
+    """
+    groups = _find_neighbouring_candidates(candidates)
 
     # singles overlapping with candidates
     for single in singles:
@@ -212,11 +336,23 @@ def _find_neighbouring(singles: List[Protocluster], candidates: List[CandidateCl
             if single.overlaps_with(candidate):
                 groups.append(set(candidate.protoclusters).union({single}))
 
-    # singles overlapping with singles
-    for i, first_single in enumerate(singles[:-1]):
-        for second_single in singles[i+1:]:
-            if not first_single.overlaps_with(second_single):
-                break
-            groups.append({first_single, second_single})
+    # and origin-crossing combinations of singles and candidates
+    edges = []
+    if singles and candidates:
+        if candidates[0].crosses_origin():
+            edges.append(candidates[0])
+        if len(candidates) > 1 and candidates[-1].crosses_origin():
+            edges.append(candidates[-1])
 
+        for candidate in edges:
+            for direction in [-1, 1]:
+                index = 0
+                single = singles[index]
+                while (abs(index) < len(singles)
+                       and locations_overlap(single.location, candidate.location)):
+                    groups.append(set(candidate.protoclusters + (single,)))
+                    index += direction
+                    single = singles[index]
+
+    groups.extend(_find_neighbouring_protoclusters(singles))
     return _merge_sets(groups)
