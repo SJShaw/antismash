@@ -359,6 +359,45 @@ def combine_locations(*locations: Iterable[Location]) -> Location:
     return FeatureLocation(start, end, strand=None)
 
 
+def combine_compound_locations(locations: List[Location]) -> Location:
+    """ Combines the given locations, compound or not, into a single location.
+
+        Arguments:
+            locations: the locations to combine
+
+        Returns:
+            the resulting location, which may or may not be compound, depending on inputs
+    """
+    if len(locations) == 1:
+        return locations[0]
+
+    if not any(len(loc.parts) > 1 for loc in locations):
+        return combine_locations(locations)
+
+    parts = list(locations[0].parts)
+    for location in locations[1:]:
+        for part in location.parts:
+            matched = False
+            for i, existing_part in enumerate(parts):
+                if locations_overlap(part, existing_part):
+                    parts[i] = combine_locations(part, existing_part)
+                    matched = True
+            if not matched:
+                parts.append(part)
+    parts = sorted(parts, key=lambda x: x.start)
+    # now that all parts have been extended, merge any that overlap
+    while any(locations_overlap(part, parts[i]) for i, part in enumerate(parts[1:])):
+        new = []
+        for i, part in enumerate(parts[1:]):
+            if parts[i] is not None and locations_overlap(part, parts[i]):
+                new.append(combine_locations(part, parts[i]))
+                parts[i] = None
+        parts = [part for part in new if part is not None]
+    if len(parts) == 1:
+        return parts[0]
+    return CompoundLocation(parts)
+
+
 def location_contains_overlapping_exons(location: Location) -> bool:
     """ Checks for multiple exons with the same end location, meaning they use the
         same stop codon
