@@ -43,6 +43,7 @@ from .features import CDSCollection
 from .features.candidate_cluster import create_candidates_from_protoclusters
 
 from .locations import (
+    get_distance_between_locations,
     location_bridges_origin,
     split_origin_bridging_location,
     combine_locations,
@@ -1089,6 +1090,16 @@ class Record:
         for char in "acgtn":
             other = other.replace(char, "")
         return len(other) < 0.2 * len(sequence)
+
+    def get_distance_between_features(self, first: Feature, second: Feature) -> int:
+        """ Returns the shortest distance between the two given features, crossing
+            the origin if the record is circular.
+
+            Overlapping features are considered to have zero distance.
+        """
+        if self.is_circular():
+            return get_distance_between_locations(first.location, second.location, wrap_point=len(self))
+        return get_distance_between_locations(first.location, second.location)
 
 
 def _calculate_crc32(string: str) -> str:
