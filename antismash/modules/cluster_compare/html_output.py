@@ -105,7 +105,7 @@ def generate_div(tag: str, region_layer: RegionLayer, record_layer: RecordLayer,
                            class_name=label, url=url)
 
 
-def generate_javascript_data(_record: Record, region: Region, results: ClusterCompareResults) -> Dict[str, Any]:
+def generate_javascript_data(record: Record, region: Region, results: ClusterCompareResults) -> Dict[str, Any]:
     """ Generates JSON data for the javascript to draw relevant results in HTML output
 
         Arguments:
@@ -150,6 +150,9 @@ def generate_javascript_data(_record: Record, region: Region, results: ClusterCo
                     assert locations.locations_overlap(hit.cds.location, region.location)
                     query_cds = hit.cds
                     query_point = query_cds.location.start + (query_cds.location.end - query_cds.location.start) // 2
+                    # if in a cross-origin region, make sure to offset the looped CDSes
+                    if len(region.location.parts) > 1 and query_cds.is_contained_by(region.location.parts[1]):
+                        query_point += len(record)
                     ref_cds = reference.cdses[ref_cds_id]
                     subject_point = ref_cds.location.start + (ref_cds.location.end - ref_cds.location.start) // 2
                     if query_cds.location.strand != ref_cds.location.strand:
