@@ -11,11 +11,13 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 from antismash.common import html_renderer, path
 from antismash.common.module_results import ModuleResults
 from antismash.common.secmet import CDSFeature, Feature, Record, Region, Source
+from antismash.common.secmet.locations import FeatureLocation, location_bridges_origin
 from antismash.common.secmet.qualifiers.gene_functions import GeneFunction
 from antismash.common.secmet.qualifiers.go import GOQualifier
 from antismash.common.secmet.features.cdscollection import CDSCollection
 from antismash.common.secmet.features.protocluster import SideloadedProtocluster
 from antismash.common.secmet.features.subregion import SideloadedSubRegion
+from antismash.common.secmet.locations import locations_overlap, split_origin_bridging_location
 from antismash.config import ConfigType
 from antismash.detection.tigrfam.tigr_domain import TIGRDomain
 from antismash.modules import clusterblast, smcog_trees, tfbs_finder as tfbs, tta
@@ -80,7 +82,7 @@ def fetch_tta_features(region: Region, result: Dict[str, ModuleResults]) -> List
     return hits
 
 
-def convert_source(source: Source, region: Region) -> Dict[str, Any]:
+def convert_source(source: Source, region: Region, name: str = None) -> Dict[str, Any]:
     """ Converts a Source feature to JSON """
     result = {
         "regionStart": max(0, source.location.start - region.location.start),
@@ -88,6 +90,8 @@ def convert_source(source: Source, region: Region) -> Dict[str, Any]:
         "recordStart": source.location.start,
         "recordEnd": source.location.end,
     }
+    if name:
+        result["name"] = name
     return result
 
 
@@ -109,10 +113,38 @@ def convert_regions(record: Record, options: ConfigType, result: Dict[str, Modul
         js_region: Dict[str, Any] = {}
         js_region['start'] = int(region.location.start) + 1
         js_region['end'] = int(region.location.end)
+        if len(region.location.parts) > 1:
+            last_part = region.location.parts[-1]
+            assert last_part.start == 0, region.location.parts
+            js_region["start"] = region.location.parts[0].start
+            js_region["end"] = len(record.seq) + last_part.end
+            start = last_part.start + len(record.seq)
+            end = len(record.seq) + len(last_part)
+            js_region["sources"] = [
+                convert_source(Source(region.location.parts[0]), region, "record end"),
+                convert_source(Source(FeatureLocation(start, end)), region, "record start"),
+            ]
+            js_region["sources"][-1]["regionEnd"] = len(record) + len(last_part)
         js_region['idx'] = region.get_region_number()
         mibig_entries = mibig_results.get(js_region['idx'], {})
-        js_region['orfs'] = convert_cds_features(record, region.cds_children, options, mibig_entries)
-        js_region['clusters'] = get_clusters_from_region(region)
+        if len(region.location.parts) > 1:
+            assert len(region.location.parts) == 2
+            orfs = []
+            if region.location.parts[1].start == 0:
+                cdses = record.get_cds_features_within_location(region.location.parts[0])
+                orfs.extend(convert_cds_features(record, cdses, options, mibig_entries))
+                # allow overlaps, because a single part will never contain a CDS crossing the origin
+                cdses = record.get_cds_features_within_location(region.location.parts[1], with_overlapping=True)
+                # just in case, filter out any CDSes that weren't fully contained by the whole region
+                cdses = [cds for cds in cdses if cds in region]
+                orfs.extend(convert_cds_features(record, cdses, options, mibig_entries, offset=len(record)))
+                assert len(orfs) == len(region.cds_children), f"{len(orfs)} != {len(region.cds_children)}"
+            else:
+                assert False  # needs to be the other way around
+            js_region["orfs"] = orfs
+        else:
+            js_region['orfs'] = convert_cds_features(record, region.cds_children, options, mibig_entries)
+        js_region['clusters'] = get_clusters_from_region(region, len(record.seq))
         sites = {
             "ttaCodons": convert_tta_codons(tta_codons, record),
             "bindingSites": convert_binding_sites(region, result),
@@ -134,7 +166,7 @@ def convert_regions(record: Record, options: ConfigType, result: Dict[str, Modul
 
 
 def convert_cds_features(record: Record, features: Iterable[CDSFeature], options: ConfigType,
-                         mibig_entries: Dict[str, List[clusterblast.results.MibigEntry]]
+                         mibig_entries: Dict[str, List[clusterblast.results.MibigEntry]], offset: int = 0,
                          ) -> List[Dict[str, Any]]:
     """ Convert CDSFeatures to JSON """
     js_orfs = []
@@ -146,9 +178,15 @@ def convert_cds_features(record: Record, features: Iterable[CDSFeature], options
         mibig_hits: List[clusterblast.results.MibigEntry] = []
         mibig_hits = mibig_entries.get(feature.get_name(), [])
         description = get_description(record, feature, str(gene_function), options, mibig_hits)
+        start = feature.location.start + 1 + offset
+        end = feature.location.end + offset
+        if location_bridges_origin(feature.location):
+            lower, upper = split_origin_bridging_location(feature.location)
+            start = min(part.start for part in upper)
+            end = max(part.end for part in lower) + len(record)
         js_orfs.append({
-            "start": feature.location.start + 1,
-            "end": feature.location.end,
+            "start": start,
+            "end": end,
             "strand": feature.strand or 1,
             "locus_tag": feature.get_name(),
             "type": str(gene_function),
@@ -200,7 +238,7 @@ def _find_non_overlapping_cluster_groups(collections: Iterable[CDSCollection],
     return results
 
 
-def get_clusters_from_region(region: Region) -> List[Dict[str, Any]]:
+def get_clusters_from_region(region: Region, record_length: int) -> List[Dict[str, Any]]:
     """ Converts all Protoclusters in a collection of CandidateCluster features to JSON """
     js_clusters = []
     candidate_clusters = sorted(region.candidate_clusters, key=lambda x: (x.location.start, -len(x.location)))
@@ -212,14 +250,25 @@ def get_clusters_from_region(region: Region) -> List[Dict[str, Any]]:
         assert isinstance(parent, Region), type(parent)
         if len(parent.candidate_clusters) == 1 and not parent.subregions and len(candidate_cluster.protoclusters) == 1:
             continue
-        js_cluster = {"start": candidate_cluster.location.start + 1,
-                      "end": candidate_cluster.location.end - 1,
-                      "tool": "",
-                      "neighbouring_start": candidate_cluster.location.start,
-                      "neighbouring_end": candidate_cluster.location.end,
-                      "product": f"CC {candidate_cluster.get_candidate_cluster_number()}: {candidate_cluster.kind}",
-                      "kind": "candidatecluster",
-                      "prefix": ""}
+        # adjust locations to account for cross-origin segments
+        start = candidate_cluster.location.parts[0].start
+        end = candidate_cluster.location.parts[-1].end
+        if len(region.location.parts) > 1:
+            offset = record_length
+            if locations_overlap(candidate_cluster.location.parts[-1], region.location.parts[-1]):
+                end += offset
+            if locations_overlap(candidate_cluster.location.parts[0], region.location.parts[-1]):
+                start += offset
+        js_cluster = {
+            "start": start + 1,
+            "end": end - 1,
+            "tool": "",
+            "neighbouring_start": start,
+            "neighbouring_end": end,
+            "product": f"CC {candidate_cluster.get_candidate_cluster_number()}: {candidate_cluster.kind}",
+            "kind": "candidatecluster",
+            "prefix": ""
+        }
         js_cluster['height'] = candidate_cluster_groupings[candidate_cluster]
         js_clusters.append(js_cluster)
 
@@ -248,20 +297,31 @@ def get_clusters_from_region(region: Region) -> List[Dict[str, Any]]:
     start_index += 2  # allow for label above
     clusters = region.get_unique_protoclusters()
     cluster_groupings = _find_non_overlapping_cluster_groups(clusters)
+    record_length = len(region.parent_record)
     for cluster in clusters:
         prefix = ""
         if isinstance(cluster, SideloadedProtocluster):
             prefix = f"{cluster.tool}:"
-        js_cluster = {"start": cluster.core_location.start,
-                      "end": cluster.core_location.end,
-                      "tool": cluster.tool,
-                      "neighbouring_start": cluster.location.start,
-                      "neighbouring_end": cluster.location.end,
-                      "product": cluster.product,
-                      "category": cluster.product_category,
-                      "height": cluster_groupings[cluster] * 2 + start_index,
-                      "kind": "protocluster",
-                      "prefix": prefix}
+        start = cluster.core_location.parts[0].start
+        end = cluster.core_location.parts[-1].end
+        if len(region.location.parts) > 1:
+            offset = record_length
+            if locations_overlap(cluster.core_location.parts[-1], region.location.parts[-1]):
+                end += offset
+            if locations_overlap(cluster.core_location.parts[0], region.location.parts[-1]):
+                start += offset
+        js_cluster = {
+            "start": start,
+            "end": end,
+            "tool": cluster.tool,
+            "neighbouring_start": start - cluster.neighbourhood_range,
+            "neighbouring_end": end + cluster.neighbourhood_range,
+            "product": cluster.product,
+            "category": cluster.product_category,
+            "height": cluster_groupings[cluster] * 2 + start_index,
+            "kind": "protocluster",
+            "prefix": prefix
+        }
         js_clusters.append(js_cluster)
 
     return js_clusters
@@ -389,8 +449,8 @@ def get_description(record: Record, feature: CDSFeature, type_: str,
             "http://www.ncbi.nlm.nih.gov/projects/sviewer/"
             "?Db=gene&DbFrom=protein&Cmd=Link&noslider=1"
             f"&id={record.id}"
-            f"&from={max(feature.location.start - 9999, 0)}"
-            f"&to={min(feature.location.end + 10000, len(record))}"
+            f"&from={max(feature.location.start - 9999, 0)}"  # TODO handle circularity
+            f"&to={min(feature.location.end + 10000, len(record))}"  # TODO handle circularity
         ),
     }
 
