@@ -144,7 +144,7 @@ def convert_regions(record: Record, options: ConfigType, result: Dict[str, Modul
             js_region["orfs"] = orfs
         else:
             js_region['orfs'] = convert_cds_features(record, region.cds_children, options, mibig_entries)
-        js_region['clusters'] = get_clusters_from_region(region, len(record.seq))
+        js_region['clusters'] = get_clusters_from_region(region, len(record.seq), circular=record.is_circular())
         sites = {
             "ttaCodons": convert_tta_codons(tta_codons, record),
             "bindingSites": convert_binding_sites(region, result),
@@ -238,8 +238,17 @@ def _find_non_overlapping_cluster_groups(collections: Iterable[CDSCollection],
     return results
 
 
-def get_clusters_from_region(region: Region, record_length: int) -> List[Dict[str, Any]]:
-    """ Converts all Protoclusters in a collection of CandidateCluster features to JSON """
+def get_clusters_from_region(region: Region, record_length: int, circular: bool = False) -> List[Dict[str, Any]]:
+    """ Converts all Protoclusters in a collection of CandidateCluster features to JSON
+
+        Arguments:
+            region: the region with protoclusters and/or subregions to convert
+            record_length: the length of the record
+            circular: whether or not the record is circular
+
+        Returns:
+            a list of dictionaries, each representing an area in the region
+    """
     js_clusters = []
     candidate_clusters = sorted(region.candidate_clusters, key=lambda x: (x.location.start, -len(x.location)))
     candidate_cluster_groupings = _find_non_overlapping_cluster_groups(candidate_clusters)
@@ -310,12 +319,18 @@ def get_clusters_from_region(region: Region, record_length: int) -> List[Dict[st
                 end += offset
             if locations_overlap(cluster.core_location.parts[0], region.location.parts[-1]):
                 start += offset
+        neighbour_start = start - cluster.neighbourhood_range
+        neighbour_end = end + cluster.neighbourhood_range
+        # if it's not a circular record, the above is too generous, so bound them
+        if not circular:
+            neighbour_start = max(0, neighbour_start)
+            neighbour_end = min(record_length, neighbour_end)
         js_cluster = {
             "start": start,
             "end": end,
             "tool": cluster.tool,
-            "neighbouring_start": start - cluster.neighbourhood_range,
-            "neighbouring_end": end + cluster.neighbourhood_range,
+            "neighbouring_start": neighbour_start,
+            "neighbouring_end": neighbour_end,
             "product": cluster.product,
             "category": cluster.product_category,
             "height": cluster_groupings[cluster] * 2 + start_index,

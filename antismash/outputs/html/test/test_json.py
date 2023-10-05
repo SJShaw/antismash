@@ -6,7 +6,12 @@
 
 import unittest
 
-from antismash.common.test.helpers import DummyProtocluster
+from antismash.common.test.helpers import (
+    DummyCandidateCluster,
+    DummyProtocluster,
+    DummyRecord,
+    DummyRegion,
+)
 from antismash.outputs.html import js as jsonify
 
 
@@ -64,3 +69,40 @@ class TestClusterPacking(unittest.TestCase):
     def test_bad_padding(self):
         with self.assertRaisesRegex(ValueError, "cannot be negative"):
             self.check([], {}, padding=-1)
+
+
+class TestConversion(unittest.TestCase):
+    def test_neighbourhood_bounded(self):
+        length = 100
+        record = DummyRecord(seq="A" * length)
+        padding = length // 4
+        protocluster = DummyProtocluster(start=0, core_start=padding, core_end=length - padding,
+                                         end=length, neighbourhood_range=padding*2)
+        record.add_protocluster(protocluster)
+        # the protocluster must fit, so that the conversion is tested with decent values
+        assert protocluster.location.end == length
+        # and a naive core end + neighbourhood size must be outside the record, to test the conversion
+        assert (protocluster.core_location.end + protocluster.neighbourhood_range) > length
+        assert len(protocluster.location) == length
+        candidate = DummyCandidateCluster([protocluster])
+        record.add_candidate_cluster(candidate)
+        region = DummyRegion(candidate_clusters=[candidate])
+        record.add_region(region)
+
+        assert not record.get_subregions()
+
+        # first, try non-circular records, checking that they're bounded correctly
+        result = jsonify.get_clusters_from_region(region, record_length=100, circular=False)
+        types = [area["kind"] for area in result]
+        assert types == ["candidatecluster", "subregion", "protocluster"]
+        result = result[-1]
+        assert result["neighbouring_start"] == 0
+        assert result["neighbouring_end"] == length
+
+        # then, try circular records, checking that they can extend past the origin
+        result = jsonify.get_clusters_from_region(region, record_length=100, circular=True)
+        types = [area["kind"] for area in result]
+        assert types == ["candidatecluster", "subregion", "protocluster"]
+        result = result[-1]
+        assert result["neighbouring_end"] == protocluster.core_location.end + protocluster.neighbourhood_range
+        assert result["neighbouring_start"] == -padding
