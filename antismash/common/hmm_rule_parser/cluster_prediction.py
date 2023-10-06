@@ -318,6 +318,9 @@ def remove_redundant_protoclusters(clusters: List[Protocluster],
         first_core_cds, last_core_cds = get_first_and_last(cluster)
         for superior in rules_by_name[rule_name].superiors:
             for other_cluster in clusters_by_rule.get(superior, []):
+                if cluster.is_contained_by(other_cluster):
+                    is_redundant = True
+                    continue
                 other_first, other_last = get_first_and_last(other_cluster)
                 if other_last < first_core_cds:
                     continue
