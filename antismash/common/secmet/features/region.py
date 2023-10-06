@@ -20,7 +20,9 @@ from .candidate_cluster import CandidateCluster
 from ..locations import (
     CompoundLocation,
     build_location_from_others,
-    combine_compound_locations,
+    connect_locations,
+    get_max_coordinate,
+    location_bridges_origin,
     location_from_string,
     offset_location,
 )
@@ -59,7 +61,9 @@ class Region(CDSCollection):
             assert isinstance(cluster, CandidateCluster), type(cluster)
             children.append(cluster)
 
-        location = combine_compound_locations([child.location for child in children])
+        locations = [child.location for child in children]
+        wrap_point = get_max_coordinate(locations) if any(location_bridges_origin(loc) for loc in locations) else None
+        location = connect_locations(locations, wrap_point=wrap_point)
         if len(location.parts) > 1:
             location = CompoundLocation(sorted(location.parts, key=lambda x: x.start, reverse=True))
 

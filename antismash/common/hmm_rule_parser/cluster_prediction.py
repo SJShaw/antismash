@@ -14,8 +14,10 @@ from antismash.common import fasta, serialiser
 from antismash.common.hmmscan_refinement import HSP
 from antismash.common.secmet import Record, Protocluster, CDSFeature, FeatureLocation
 from antismash.common.secmet.locations import (
-    location_contains_other,
+    Location,
     get_distance_between_locations,
+    location_bridges_origin,
+    location_contains_other,
 )
 from antismash.common.secmet.qualifiers import GeneFunction, SecMetQualifier
 from antismash.common.subprocessing import run_hmmsearch

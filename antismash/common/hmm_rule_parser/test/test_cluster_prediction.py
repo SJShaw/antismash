@@ -9,7 +9,8 @@ import unittest
 from unittest.mock import patch
 
 from antismash.common.hmm_rule_parser import cluster_prediction, rule_parser, structures
-from antismash.common.secmet.features import Protocluster, FeatureLocation
+from antismash.common.secmet.features import Protocluster
+from antismash.common.secmet.locations import CompoundLocation, FeatureLocation
 from antismash.common.secmet.qualifiers.gene_functions import GeneFunction
 from antismash.common.secmet.test.helpers import DummyProtocluster
 from antismash.common.test.helpers import DummyRecord, DummyCDS, FakeHSPHit
