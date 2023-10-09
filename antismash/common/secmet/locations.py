@@ -221,22 +221,25 @@ def split_origin_bridging_location(location: CompoundLocation) -> Tuple[
     """
     lower: List[FeatureLocation] = []
     upper: List[FeatureLocation] = []
-    if location.strand == 1:
+    strands_used = set(part.strand for part in location.parts)
+    # no strand will be treated as forward, but mixed strands is still a problem
+    if len(strands_used) > 1:
+        raise ValueError("Cannot separate bridged location without a valid strand")
+
+    if location.strand != -1:
         for i, part in enumerate(location.parts):
             if not upper or part.start > upper[-1].start:
                 upper.append(part)
             else:
                 lower.extend(location.parts[i:])
                 break
-    elif location.strand == -1:
+    else:
         for i, part in enumerate(location.parts):
             if not lower or part.start < lower[-1].start:
                 lower.append(part)
             else:
                 upper.extend(location.parts[i:])
                 break
-    else:
-        raise ValueError("Cannot separate bridged location without a valid strand")
 
     if not (lower and upper):
         raise ValueError(f"Location does not bridge origin: {location}")
@@ -384,7 +387,6 @@ def combine_compound_locations(locations: List[Location]) -> Location:
                     matched = True
             if not matched:
                 parts.append(part)
-    parts = sorted(parts, key=lambda x: x.start)
     # now that all parts have been extended, merge any that overlap
     while any(locations_overlap(part, parts[i]) for i, part in enumerate(parts[1:])):
         new = []
