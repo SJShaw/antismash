@@ -40,8 +40,6 @@ class Feature:
     def __init__(self, location: Location, feature_type: str,
                  created_by_antismash: bool = False) -> None:
         assert isinstance(location, (FeatureLocation, CompoundLocation)), type(location)
-        if location_bridges_origin(location):
-            raise ValueError(f"Features that bridge the record origin cannot be directly created: {location}")
         if location_contains_overlapping_exons(location):
             raise ValueError(f"location contains overlapping exons: {location}")
         assert location.start <= location.end, f"Feature location invalid: {location}"
@@ -184,6 +182,10 @@ class Feature:
         if isinstance(other, (CompoundLocation, FeatureLocation)):
             return location_contains_other(other, self.location)
         raise TypeError(f"Container must be a Feature, CompoundLocation or FeatureLocation, not {type(other)}")
+
+    def crosses_origin(self) -> bool:
+        """ Returns True if the feature crosses the origin """
+        return location_bridges_origin(self.location)
 
     def to_biopython(self, qualifiers: Dict[str, Any] = None) -> List[SeqFeature]:
         """ Converts this feature into one or more SeqFeature instances.

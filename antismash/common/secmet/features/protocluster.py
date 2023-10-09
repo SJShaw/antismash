@@ -10,7 +10,7 @@ from Bio.SeqFeature import SeqFeature
 from .cds_feature import CDSFeature
 from .cdscollection import CDSCollection
 from .feature import Feature, FeatureLocation
-from ..locations import location_from_string
+from ..locations import CompoundLocation, location_from_string
 from ..qualifiers.t2pks import T2PKSQualifier
 from ..qualifiers.gene_functions import GeneFunction
 
@@ -35,6 +35,11 @@ class Protocluster(CDSCollection):
     def __init__(self, core_location: FeatureLocation, surrounding_location: FeatureLocation,
                  tool: str, product: str, cutoff: int, neighbourhood_range: int,
                  detection_rule: str, product_category: str = "other") -> None:
+        if len(surrounding_location.parts) > 1:
+            surrounding_location = CompoundLocation(sorted(surrounding_location.parts, key=lambda x: x.start, reverse=True))
+        if len(core_location.parts) > 1:
+            core_location = CompoundLocation(sorted(core_location.parts, key=lambda x: x.start, reverse=True))
+        assert len(surrounding_location.parts) >= len(core_location.parts)
         super().__init__(surrounding_location, feature_type=self.FEATURE_TYPE)
         # cluster-wide
         self.detection_rule = detection_rule

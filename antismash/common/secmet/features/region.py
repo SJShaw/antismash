@@ -18,8 +18,9 @@ from .feature import Feature, FeatureLocation
 from .subregion import SideloadedSubRegion, SubRegion
 from .candidate_cluster import CandidateCluster
 from ..locations import (
+    CompoundLocation,
     build_location_from_others,
-    combine_locations,
+    combine_compound_locations,
     location_from_string,
     offset_location,
 )
@@ -58,7 +59,9 @@ class Region(CDSCollection):
             assert isinstance(cluster, CandidateCluster), type(cluster)
             children.append(cluster)
 
-        location = combine_locations(child.location for child in children)
+        location = combine_compound_locations([child.location for child in children])
+        if len(location.parts) > 1:
+            location = CompoundLocation(sorted(location.parts, key=lambda x: x.start, reverse=True))
 
         super().__init__(location, feature_type=self.FEATURE_TYPE, child_collections=children)
         self._subregions = subregions
