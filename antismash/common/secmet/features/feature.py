@@ -23,6 +23,8 @@ from ..locations import (
     frameshift_location_by_qualifier,
     Location,
     location_contains_overlapping_exons,
+    location_bridges_origin,
+    split_origin_bridging_location,
 )
 
 T = TypeVar("T", bound="Feature")
@@ -219,17 +221,39 @@ class Feature:
 
     def __lt__(self, other: Union["Feature", FeatureLocation]) -> bool:
         """ Allows sorting Features by location without key complication """
-        if isinstance(other, FeatureLocation):
-            location = other
-        else:
-            assert isinstance(other, Feature)
-            location = other.location
 
-        if self.location.start < location.start:
+        def compare(first: Location, second: Location) -> bool:
+            if first.start < second.start:
+                return True
+            if first.start == second.start:
+                return first.end < second.end
+            return False
+
+        self_mostly_before = False  # the default for non-origin-bridging locations
+        if location_bridges_origin(self.location):
+            self_tail, self_head = split_origin_bridging_location(self.location)
+            self_mostly_before = sum(len(t) for t in self_tail) > sum(len(h) for h in self_head)
+
+        if isinstance(other, FeatureLocation):
+            return compare(self.location, other)
+
+        if isinstance(other, Feature):
+            return compare(self.location, other.location)
+
+        assert isinstance(other, CompoundLocation)
+        head, tail = split_origin_bridging_location(other)
+        # a feature that's mostly on the start of a record should be considered at the beginning
+        # conversely, a feature mostly at the end of a record should be considered at the end
+        mostly_before = sum(len(h) for h in head) > sum(len(t) for t in tail)
+        if mostly_before and self_mostly_before:
+            return compare(self.location, head[0])
+        if mostly_before:
+            return False
+        if self_mostly_before:
             return True
-        if self.location.start == location.start:
-            return self.location.end < location.end
-        return False
+        return compare(self.location, tail[0])
+
+
 
     def __str__(self) -> str:
         return repr(self)
