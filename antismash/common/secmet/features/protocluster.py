@@ -36,7 +36,8 @@ class Protocluster(CDSCollection):
                  tool: str, product: str, cutoff: int, neighbourhood_range: int,
                  detection_rule: str, product_category: str = "other") -> None:
         if len(surrounding_location.parts) > 1:
-            surrounding_location = CompoundLocation(sorted(surrounding_location.parts, key=lambda x: x.start, reverse=True))
+            parts = sorted(surrounding_location.parts, key=lambda x: x.start, reverse=True)
+            surrounding_location = CompoundLocation(parts)
         if len(core_location.parts) > 1:
             core_location = CompoundLocation(sorted(core_location.parts, key=lambda x: x.start, reverse=True))
         assert len(surrounding_location.parts) >= len(core_location.parts)
