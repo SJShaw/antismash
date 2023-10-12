@@ -610,7 +610,7 @@ RULE other
     CUTOFF 20
     NEIGHBOURHOOD 20
     CONDITIONS LmbU or Neocarzinostat or bcpB
-               or frbD or mitE or vlmB or prnB or CaiA or bacilysin or orf2_PTase
+               or frbD or mitE or prnB or CaiA or bacilysin or orf2_PTase
 
 RULE acyl_amino_acids
     CATEGORY other
@@ -740,3 +740,56 @@ RULE hydrogen-cyanide
     CUTOFF 5
     NEIGHBOURHOOD 5
     CONDITIONS Fer2_4 and cds(Pyr_redox_2 and Fer2_BFD) and DAO
+
+RULE azoxymycin
+    CATEGORY other
+    DESCRIPTION temp
+    CUTOFF 20
+    NEIGHBOURHOOD 10
+    CONDITIONS AurF and Ketoacyl-synt_2 and (cds(ketoacyl-synt and Ketoacyl-synt_C) or hr-t2pks-ksa) and AMP-binding  # C F G J
+
+RULE azoxymycin-like
+    CATEGORY other
+    DESCRIPTION temp
+    SUPERIORS azoxymycin
+    CUTOFF 20
+    NEIGHBOURHOOD 10
+    CONDITIONS AurF and AMP-binding  # C J
+
+DEFINE azo_base AS azdH_alignment and LPG_synthase_C and azdO # azdH, azdA, azdO
+DEFINE azo_comp AS azo_base and vlmB # HABO
+
+
+RULE azodyrecin-like
+    CATEGORY other
+    DESCRIPTION temp
+    CUTOFF 20
+    NEIGHBOURHOOD 10
+    CONDITIONS azo_comp and (Aminotran_3 or NAD_binding_4)
+               and not Pyridoxal_deC  # otherwise it'd be valanimycin
+
+RULE valanimycin-like
+    CATEGORY other
+    DESCRIPTION temp
+    CUTOFF 20
+    NEIGHBOURHOOD 10
+    CONDITIONS azo_comp and Pyridoxal_deC
+               and not (Aminotran_3 or NAD_binding_4) # otherwise it'd be azodyrecin
+
+RULE azoxy-compound
+    CATEGORY other
+    DESCRIPTION non-dimer azoxy compounds constructed from N-N
+    EXAMPLE NCBI AY116644.1 1-21500 valanimycin
+    SUPERIORS valanimycin-like, azodyrecin-like
+    CUTOFF 20
+    NEIGHBOURHOOD 10
+    CONDITIONS azo_comp  # H A O B
+
+RULE azo-compound
+    CATEGORY other
+    DESCRIPTION temp
+    RELATED Flavin_Reduct   # R
+    SUPERIORS azoxy-compound
+    CUTOFF 20
+    NEIGHBOURHOOD 10
+    CONDITIONS azo_base  # H A O
