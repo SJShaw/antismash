@@ -156,9 +156,12 @@ def location_bridges_origin(location: Location, allow_reversing: bool = False) -
     if not isinstance(location, CompoundLocation):
         return False
 
-    # invalid strands mean direction can't be determined, may need to be an error
+    # a missing strand has a little less reliability, but as long as it's ordered
+    # correctly the correct result will be found
     if location.strand not in [1, -1]:
-        return False
+        starts = [part.start for part in location.parts]
+        ordered = sorted(starts)
+        return starts != ordered
 
     def check(location: Location) -> bool:
         """ Returns True if the exon ordering is invalid for the strand """
@@ -398,6 +401,25 @@ def combine_compound_locations(locations: List[Location]) -> Location:
     if len(parts) == 1:
         return parts[0]
     return CompoundLocation(parts)
+
+
+def make_forwards(location: Location) -> Location:
+    """ Creates a copy of a location in the forward strand,
+        reordering the components if it was on the reverse strand.
+
+        Arguments:
+            location: the location to convert
+
+        Returns:
+            a new location in the forward strand
+    """
+    parts = [FeatureLocation(part.start, part.end, 1) for part in location.parts]
+    if location.strand == -1:
+        parts.reverse()
+    if len(parts) == 1:
+        return parts[0]
+    loc = CompoundLocation(parts)
+    return loc
 
 
 def location_contains_overlapping_exons(location: Location) -> bool:
