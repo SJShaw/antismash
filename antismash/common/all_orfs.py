@@ -82,8 +82,8 @@ def get_trimmed_orf(orf: CDSFeature, record: Record, include: int = None,
     return create_feature_from_location(record, location, label=label)
 
 
-def scan_orfs(seq: str, direction: int, offset: int = 0, minimum_length: int = 60
-              ) -> List[FeatureLocation]:
+def scan_orfs(seq: str, direction: int, offset: int = 0, minimum_length: int = 60,
+              ) -> list[FeatureLocation]:
     """ Scan for open reading frames on a given sequence.
         Skips all ORFs with a size less than the given minimum nucleotides.
 
