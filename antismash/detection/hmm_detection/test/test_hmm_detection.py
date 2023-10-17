@@ -346,6 +346,7 @@ class TestRuleExtenders(unittest.TestCase):
         assert set("12345") == {cds.get_name() for cds in self.potential_cores}
 
         self.record = DummyRecord(features=self.cdses)
+        assert not self.record.is_circular()
         assert all(self.record.get_cds_by_name(cds.get_name()) for cds in self.cdses)
         self.results_by_id = {}
         self.add_hit("3", "A")

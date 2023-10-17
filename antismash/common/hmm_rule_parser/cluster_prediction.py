@@ -12,12 +12,14 @@ from typing import Any, Dict, FrozenSet, Iterable, Iterator, List, Optional, Set
 
 from antismash.common import fasta, serialiser
 from antismash.common.hmmscan_refinement import HSP
-from antismash.common.secmet import Record, Protocluster, CDSFeature, FeatureLocation
+from antismash.common.secmet import CDSFeature, Feature, FeatureLocation, Protocluster, Record
 from antismash.common.secmet.locations import (
     Location,
+    connect_locations,
     get_distance_between_locations,
     location_bridges_origin,
     location_contains_other,
+    make_forwards,
 )
 from antismash.common.secmet.qualifiers import GeneFunction, SecMetQualifier
 from antismash.common.subprocessing import run_hmmsearch
@@ -384,22 +386,71 @@ def apply_extenders(clusters: list[Protocluster],
         # for each direction, the domain/result updates will be handled by the marker
         # but since the core location updates are direction dependent, they still must be handled
 
-        for cds in mark_extendable(reversed(cdses[:index]), core_cdses[0], rule, core):
-            core = FeatureLocation(cds.location.start, core.end)
+        def cycle(items: tuple[CDSFeature, ...], index: int, direction: int = 1) -> Iterator[CDSFeature]:
+            if direction == -1:
+                sections: list[Iterable[CDSFeature]] = [reversed(items[:index]), reversed(items[index+1:])]
+            else:
+                sections = [items[index:], items[:index]]
 
-        for cds in mark_extendable(cdses[index:], core_cdses[-1], rule, core):
-            core = FeatureLocation(core.start, cds.location.end)
+            if not record.is_circular():
+                sections = [sections[0]]
+
+            for section in sections:
+                for item in section:
+                    yield item
+
+        for cds in mark_extendable(cycle(cdses, index, -1), core_cdses[0], rule, core):
+            core = connect_locations([cds.location, core], wrap_point=len(record))
+
+        for cds in mark_extendable(cycle(cdses, index), core_cdses[-1], rule, core):
+            core = connect_locations([cds.location, core], wrap_point=len(record))
 
         # the new core should be at least as large as the old core
         assert location_contains_other(core, cluster.core_location), f"{cluster.core_location} not in {core}"
         # update locations
-        surrounds = FeatureLocation(max(0, core.start - rule.neighbourhood),
-                                    min(core.end + rule.neighbourhood, len(record)))
+        surrounds = _extend_area_location(core, rule.neighbourhood, record)
         results.append(Protocluster(core, surrounding_location=surrounds,
                                     tool="rule-based-clusters", cutoff=rule.cutoff,
                                     neighbourhood_range=rule.neighbourhood, product=rule.name,
                                     detection_rule=str(rule.conditions), product_category=rule.category))
     return results
+
+
+def _extend_area_location(location: Location, distance: int, record: Record) -> Location:
+    """ A restrictive wrapper of Record.extend_location(), specifically for areas
+        and not CDS features. No area should have more than two parts when
+        overlapping the origin in circular genomes and in non-circular genomes,
+        there will only ever be one part.
+
+        Arguments:
+            location: the location to extend, at most two parts and in the forward strand
+            distance: the distance to extend the location, both before and after
+            record: the record the location belongs in
+
+        Returns:
+            a new location, covering the requested distance, with two parts iff it crosses the origin
+    """
+    # make sure that the incoming location is acceptable
+    assert location.strand is not None
+    max_parts = 1
+    if record.is_circular():
+        max_parts = 2
+        if len(location.parts) > 1 and not location_bridges_origin(location):
+            raise ValueError("Areas with existing compound locations must bridge the origin")
+        distance = min(distance, (len(record) - len(location)) // 2)
+
+    # the extension will be much simpler if the strand is always fowards
+    if location.strand != 1:
+        location = make_forwards(location)
+
+    # extend the location
+    location = record.extend_location(location, distance)
+
+    # too many parts means something has gone wrong prior to this function
+    if len(location.parts) > max_parts:
+        raise ValueError("Area has too many sub-locations for record type")
+
+    return location
 
 
 def find_protoclusters(record: Record, cds_by_cluster_type: Dict[str, Set[str]],
@@ -425,45 +476,47 @@ def find_protoclusters(record: Record, cds_by_cluster_type: Dict[str, Set[str]],
     clusters: List[Protocluster] = []
     cds_feature_by_name = record.get_cds_name_mapping()
 
+    wrap_point = len(record) if record.is_circular() else None
+
     for cluster_type, cds_names in cds_by_cluster_type.items():
+        cores = []
+        # because sets aren't ordered, sort the features for consistency
         cds_features = sorted([cds_feature_by_name[cds] for cds in cds_names])
+        cross_origin = [feature for feature in cds_features if location_bridges_origin(feature.location)]
+        cds_features = sorted([feature for feature in cds_features if not location_bridges_origin(feature.location)])
         rule = rules_by_name[cluster_type]
         cutoff = rule.cutoff
-        core_location = FeatureLocation(cds_features[0].location.start, cds_features[0].location.end)
-        for cds in cds_features[1:]:
-            if cds.overlaps_with(FeatureLocation(max(0, core_location.start - cutoff),
-                                                 core_location.end + cutoff)):
-                core_location = FeatureLocation(min(cds.location.start, core_location.start),
-                                                max(cds.location.end, core_location.end))
-                assert core_location.start >= 0 and core_location.end <= len(record)
+        if cross_origin:
+            cores.append(Feature(connect_locations([cds.location for cds in cross_origin],
+                         wrap_point=wrap_point), "temp"))
+        while cds_features:
+            # since the features are sorted already, groups will automatically connect
+            # except for possibly the first and last in a circular record
+            cds = cds_features.pop()
+            if not cores:
+                cores.append(Feature(connect_locations([cds.location], wrap_point=wrap_point), "temp"))
                 continue
-            # create the previous cluster and start a new location
-            surrounds = FeatureLocation(max(0, core_location.start - rule.neighbourhood),
-                                        min(core_location.end + rule.neighbourhood, len(record)))
-            surrounding_cdses = record.get_cds_features_within_location(surrounds, with_overlapping=False)
-            real_start = min(contained.location.start for contained in surrounding_cdses)
-            real_end = max(contained.location.end for contained in surrounding_cdses)
-            surrounds = FeatureLocation(real_start, real_end)
+            dummy = Feature(_extend_area_location(cores[-1].location, cutoff, record), "temp")
+            if record.get_distance_between_features(cds, dummy) < cutoff:
+                cores[-1].location = connect_locations([cores[-1].location, cds.location], wrap_point=wrap_point)
+                continue
+            cores.append(Feature(connect_locations([cds.location], wrap_point=wrap_point), "temp"))
+        assert cores
+        if len(cores) > 1:
+            dummy = Feature(_extend_area_location(cores[-1].location, cutoff, record), "temp")
+            if record.get_distance_between_features(cores[0], dummy) < cutoff:
+                last = cores.pop()
+                cores[0].location = connect_locations([cores[0].location, last.location], wrap_point=wrap_point)
+        # form a protocluster for each core
+        for core in cores:
+            core_location = core.location
+            if len(core_location) > 1:
+                core_location = connect_locations([core_location], wrap_point=wrap_point)
+            surrounds = _extend_area_location(core_location, rule.neighbourhood, record)
             clusters.append(Protocluster(core_location, surrounding_location=surrounds,
                                          tool="rule-based-clusters", cutoff=cutoff,
                                          neighbourhood_range=rule.neighbourhood, product=cluster_type,
                                          detection_rule=str(rule.conditions), product_category=rule.category))
-            core_location = FeatureLocation(cds.location.start, cds.location.end)
-
-        # finalise the last cluster
-        surrounds = FeatureLocation(max(0, core_location.start - rule.neighbourhood),
-                                    min(core_location.end + rule.neighbourhood, len(record)))
-        clusters.append(Protocluster(core_location, surrounding_location=surrounds,
-                                     tool="rule-based-clusters", cutoff=cutoff,
-                                     neighbourhood_range=rule.neighbourhood, product=cluster_type,
-                                     detection_rule=str(rule.conditions), product_category=rule.category))
-
-    # fit to record if outside
-    for cluster in clusters:
-        contained = FeatureLocation(max(0, cluster.location.start),
-                                    min(cluster.location.end, len(record)))
-        if contained != cluster.location:
-            cluster.location = contained
 
     clusters = apply_extenders(clusters, rules_by_name, record, results_by_id, cds_domains_by_cluster)
 
@@ -612,19 +665,21 @@ def apply_cluster_rules(record: Record, results_by_id: Dict[str, List[ProfileHit
     cluster_type_hits: Dict[str, Set[str]] = defaultdict(set)
     for cds_name in cds_with_hits:
         feature = record.get_cds_by_name(cds_name)
-        feature_start, feature_end = sorted([feature.location.start, feature.location.end])
         rule_texts = []
         info_by_range: Dict[int, Tuple[Dict[str, CDSFeature], Dict[str, List[HSP]]]] = {}
         for rule in rules:
             if rule.cutoff not in info_by_range:
-                location = FeatureLocation(max(0, feature_start - rule.cutoff), feature_end + rule.cutoff)
+                location = connect_locations([feature.location], wrap_point=len(record))
+                assert len(location.parts) <= 2, location
+                location = _extend_area_location(location, rule.cutoff, record)
+                circular_origin = len(record) if len(location.parts) > 1 else 0
                 nearby = record.get_cds_features_within_location(location, with_overlapping=True)
                 nearby_features = {neighbour.get_name(): neighbour for neighbour in nearby}
                 nearby_results = {neighbour: results_by_id[neighbour]
                                   for neighbour in nearby_features if neighbour in results_by_id}
                 info_by_range[rule.cutoff] = (nearby_features, nearby_results)
             nearby_features, nearby_results = info_by_range[rule.cutoff]
-            matching = rule.detect(cds_name, nearby_features, nearby_results)
+            matching = rule.detect(cds_name, nearby_features, nearby_results, circular_origin=circular_origin)
             if matching.met and matching.matches:
                 cds_domains_by_cluster_type[cds_name][rule.name].update(matching.matches)
                 rule_texts.append(rule.reconstruct_rule_text())
