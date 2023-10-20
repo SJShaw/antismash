@@ -140,6 +140,18 @@ def get_distance_between_locations(first: Location, second: Location, wrap_point
     return distance
 
 
+def get_max_coordinate(locations: Iterable[Location]) -> int:
+    """ Get the maximum coordinate within the given locations
+
+        Arguments:
+            locations: the locations in which to find the max coordinate
+
+        Returns:
+            the maximum coordinate found
+    """
+    return max(part.end for location in locations for part in location.parts)
+
+
 def location_bridges_origin(location: Location, allow_reversing: bool = False) -> bool:
     """ Determines if a CompoundLocation would cross the origin of a record.
 

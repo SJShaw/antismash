@@ -16,6 +16,7 @@ from antismash.common.secmet.locations import (
     build_location_from_others,
     ensure_valid_locations,
     get_distance_between_locations,
+    get_max_coordinate,
     location_bridges_origin as is_bridged,
     split_origin_bridging_location as splitter,
     location_contains_other,
@@ -365,6 +366,24 @@ class TestLocationSerialiser(unittest.TestCase):
             location = FeatureLocation(1, 6, strand=strand)
             new_location = self.convert(location)
             assert new_location.strand == strand
+
+
+class TestMaxCoordinate(unittest.TestCase):
+    def test_simple(self):
+        locations = [
+            FeatureLocation(4, 7, strand=1),
+            FeatureLocation(15, 21, strand=1),
+            FeatureLocation(0, 18, strand=1),
+        ]
+        assert get_max_coordinate(locations) == 21
+
+    def test_compound(self):
+        locations = [
+            CompoundLocation([FeatureLocation(15, 24, strand=1), FeatureLocation(0, 3, strand=1)]),
+            FeatureLocation(4, 7, strand=1),
+            FeatureLocation(0, 18, strand=1),
+        ]
+        assert get_max_coordinate(locations) == 24
 
 
 class TestCombiner(unittest.TestCase):
