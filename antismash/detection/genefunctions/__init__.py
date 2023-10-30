@@ -21,12 +21,14 @@ from .tools import (
     Hit,
     Tool,
     extras,
+    halogenases,
     mite,
     resistance,
     smcogs,
 )
 
 from .tools.extras import Results as ExtrasResults
+from .tools.halogenases import HalogenaseResults
 from .tools.mite import Results as MiteResults
 from .tools.smcogs import Results as SmcogsResults
 from .tools.resistance import Results as ResistanceResults
@@ -37,6 +39,7 @@ DETECTION_STAGE = DetectionStage.PER_AREA
 
 TOOLS = [
     extras.TOOL,
+    halogenases.TOOL,
     mite.TOOL,
     smcogs.TOOL,
     resistance.TOOL,
@@ -49,6 +52,7 @@ class ToolResults:
     # members are named by tool to simplify downstream typing, avoiding a great
     # deal of extra type casting
     extras: Optional[ExtrasResults] = None
+    halogenases: Optional[HalogenaseResults] = None
     mite: Optional[MiteResults] = None
     resist: Optional[ResistanceResults] = None
     smcogs: Optional[SmcogsResults] = None
@@ -62,6 +66,8 @@ class ToolResults:
             yield self.resist
         if self.smcogs:
             yield self.smcogs
+        if self.halogenases:
+            yield self.halogenases
 
     def add_tool_results(self, tool: Tool, results: FunctionResults[Hit]) -> None:
         """ Adds the given tool's results to the instance.
@@ -90,6 +96,10 @@ class ToolResults:
             assert isinstance(results, mite.Results)
             self.mite = results
             return
+        if tool is halogenases.TOOL:
+            assert isinstance(results, halogenases.HalogenaseResults)
+            self.halogenases = results
+            return
 
         raise NotImplementedError(f"Results storage has no handling for {tool.name}")
 
@@ -101,6 +111,7 @@ class ToolResults:
             mite=mite.regenerate_results(data.get(mite.TOOL.name.lower())),
             smcogs=smcogs.regenerate_results(data.get(smcogs.TOOL.name.lower())),
             resist=resistance.regenerate_results(data.get(resistance.TOOL.name.lower())),
+            halogenases=halogenases.regenerate_results(data.get(halogenases.TOOL.name.lower())),
         )
 
 
