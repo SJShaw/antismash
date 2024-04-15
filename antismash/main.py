@@ -21,7 +21,7 @@ import pstats
 import shutil
 import time
 import tempfile
-from typing import cast, Any, Dict, List, Optional, Tuple, Union
+from typing import cast, Any, Dict, Iterable, List, Optional, Tuple, Union
 
 from Bio.SeqRecord import SeqRecord
 from helperlibs.bio import seqio as hl_seqio
@@ -77,6 +77,39 @@ def _gather_detection_modules() -> Dict[DetectionStage, List[AntismashModule]]:
 
 _ANALYSIS_MODULES = _gather_modules_in_section("modules")
 _DETECTION_MODULES = _gather_detection_modules()
+
+
+def replace_analysis_modules(modules: Iterable[AntismashModule]) -> None:
+    """ Replaces default antiSMASH analysis modules with the provided modules.
+        The replacement modules may include existing antiSMASH modules as
+        well as custom modules.
+
+        Arguments:
+            modules: a list of modules
+
+        Returns:
+            None
+    """
+    _ANALYSIS_MODULES.clear()
+    _ANALYSIS_MODULES.extend(modules)
+
+
+def replace_detection_modules(modules: list[AntismashModule]) -> None:
+    """ Replaces default antiSMASH detection modules with the provided modules.
+        The replacement modules may include existing antiSMASH modules as
+        well as custom modules.
+
+        Arguments:
+            modules: a list of modules
+
+        Returns:
+            None
+    """
+    for key, values in _DETECTION_MODULES.items():
+        values.clear()
+        for module in modules:
+            if module.DETECTION_STAGE == key:
+                values.append(module)
 
 
 def get_all_modules() -> List[AntismashModule]:
