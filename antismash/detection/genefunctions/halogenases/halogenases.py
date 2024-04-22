@@ -4,7 +4,7 @@
 # for test files, silence irrelevant and noisy pylint warnings
 # pylint: disable=use-implicit-booleaness-not-comparison,protected-access,missing-docstring
 
-from typing import Any, List, Optional, Iterable, Union, Dict
+from typing import Any, Optional, Iterable, Self, Union
 
 from dataclasses import dataclass, field
 
@@ -12,8 +12,10 @@ from antismash.common.hmmscan_refinement import HMMResult
 
 NAME = "halogenases_analysis"
 
+
 class HalogenaseHmmResult(HMMResult):
     """ Enzymes identified as a halogenase
+
         hit_id: name of the matching profile
         start: start position within the query's translation
         end: end position within the query's translation
@@ -43,8 +45,8 @@ class Match:
     cofactor: str
     family: str
     confidence: float
-    consensus_residues: Union[str, Dict[str,str]]
-    substrates: Union[str, List[str], None] = None
+    consensus_residues: Union[str, dict[str, str]]
+    substrates: Union[str, list[str], None] = None
     target_positions: Optional[Union[int, list[int]]] = None
     number_of_decorations: Optional[str] = None
 
@@ -55,14 +57,15 @@ class Match:
     def from_json(cls, data: dict[str, Any]) -> "Match":
         return cls(**data)
 
+
 @dataclass
-class FlavinDependentHalogenases:
+class FlavinDependentHalogenase:
     cds_name: str
     cofactor: str
     family: str
     confidence: float = 0
-    consensus_residues: Optional[Union[str, Dict[str,str]]] = None
-    substrates: Union[str, List[str], None] = None
+    consensus_residues: Optional[Union[str, dict[str, str]]] = None
+    substrates: Union[str, list[str], None] = None
     target_positions: Optional[Union[int, list[int]]] = None
     number_of_decorations: Optional[str] = None
     potential_matches: list[Match] = field(default_factory=list)
@@ -109,7 +112,7 @@ class FlavinDependentHalogenases:
             self.number_of_decorations = best_match.number_of_decorations
             self.substrates = best_match.substrates
 
-    def to_json(self) -> Dict[str, Any]:
+    def to_json(self) -> dict[str, Any]:
         """ Constructs a JSON representation of this instance """
         potential_matches_json = [match.to_json() for match in self.potential_matches]
 
@@ -126,7 +129,7 @@ class FlavinDependentHalogenases:
         }
 
     @classmethod
-    def from_json(cls, data: Dict[str, Any]) -> "FlavinDependentHalogenases":
+    def from_json(cls, data: dict[str, Any]) -> Self:
         """ Constructs the TailoringEnzymes from the JSON representation """
 
         cds_name = data["cds_name"]
@@ -142,6 +145,3 @@ class FlavinDependentHalogenases:
                      consensus_residues, substrates, target_positions,
                      number_of_decorations, potential_matches)
         return enzyme
-
-class TailoringEnzymes():
-    pass

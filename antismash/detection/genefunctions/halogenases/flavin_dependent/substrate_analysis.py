@@ -19,7 +19,7 @@ from antismash.common import (
     utils)
 
 from antismash.detection.genefunctions.halogenases.halogenases import (
-    FlavinDependentHalogenases,
+    FlavinDependentHalogenase,
     HalogenaseHmmResult
     )
 
@@ -166,9 +166,9 @@ def run_halogenase_phmms(cluster_fasta: str, profiles: list
 
 
 
-def categorize_on_substrate_level(cds: CDSFeature, halogenase_match: FlavinDependentHalogenases,
+def categorize_on_substrate_level(cds: CDSFeature, halogenase_match: FlavinDependentHalogenase,
                                   hmm_results: list[HalogenaseHmmResult]
-                                  ) -> Optional[FlavinDependentHalogenases]:
+                                  ) -> Optional[FlavinDependentHalogenase]:
     """ Check if protein could be categorized as a Flavin-dependent enzyme
 
         Arguments:
@@ -200,8 +200,8 @@ def categorize_on_substrate_level(cds: CDSFeature, halogenase_match: FlavinDepen
 
 def categorize_on_consensus_level(cds: CDSFeature, specific_hmm_hits: list[HalogenaseHmmResult],
                                   general_hmm_hits: list[HalogenaseHmmResult]
-                                  ) -> FlavinDependentHalogenases:
-    enzyme = FlavinDependentHalogenases(cds.get_name(), cofactor="flavin", family="FDH")
+                                  ) -> FlavinDependentHalogenase:
+    enzyme = FlavinDependentHalogenase(cds.get_name(), cofactor="flavin", family="FDH")
     if specific_hmm_hits:
         enzyme = categorize_on_substrate_level(cds, enzyme, specific_hmm_hits) \
                     or enzyme
@@ -220,7 +220,7 @@ def categorize_on_consensus_level(cds: CDSFeature, specific_hmm_hits: list[Halog
 
     return enzyme
 
-def fdh_specific_analysis(record: Record) -> Union[list, list[FlavinDependentHalogenases]]:
+def fdh_specific_analysis(record: Record) -> Union[list, list[FlavinDependentHalogenase]]:
     """ Categorization of enzyme, categorizes any halogenase in a cds in regions
 
         Arguments: record instance,

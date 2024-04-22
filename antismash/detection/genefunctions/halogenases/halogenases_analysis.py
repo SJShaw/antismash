@@ -7,9 +7,9 @@
 from typing import Optional
 
 from antismash.common.secmet import Record
-from antismash.detection.genefunctions.halogenases.halogenases import FlavinDependentHalogenases
+from antismash.detection.genefunctions.halogenases.halogenases import FlavinDependentHalogenase
 from .flavin_dependent.substrate_analysis import fdh_specific_analysis
 
 def specific_analysis(record: Record)\
-    -> Optional[list[FlavinDependentHalogenases]]:
+    -> Optional[list[FlavinDependentHalogenase]]:
     return fdh_specific_analysis(record)

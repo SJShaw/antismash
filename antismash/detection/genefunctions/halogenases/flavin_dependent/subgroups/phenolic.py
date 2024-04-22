@@ -13,7 +13,7 @@ from antismash.common.signature import HmmSignature
 from antismash.detection.genefunctions.halogenases.halogenases import (
     Match,
     HalogenaseHmmResult,
-    FlavinDependentHalogenases)
+    FlavinDependentHalogenase)
 from antismash.detection.genefunctions.halogenases.flavin_dependent import substrate_analysis
 
 SPECIFIC_PROFILES = [HmmSignature("tyrosine-like_hpg_FDH",
@@ -39,7 +39,7 @@ TYR_HPG_SIGNATURE_RESIDUES = {"Tyr": "GFQRLGDAGLSGVPSYGADPSGLYW",
 OTHER_PHENOLIC_SIGNATURE_RESIDUES = "LGPRGGRDAGVDAGGYGFDPSG"
 
 def search_for_match(retrieved_residues: Union[dict[str, str], str],
-                     halogenase: FlavinDependentHalogenases,
+                     halogenase: FlavinDependentHalogenase,
                      hit: HalogenaseHmmResult, position: Union[int, List[int]],
                      cutoffs: Union[List[int], int], *,
                      expected_residues: Union[str, dict[str, str]],
@@ -105,7 +105,7 @@ def search_for_match(retrieved_residues: Union[dict[str, str], str],
     return False
 
 def update_match(name: str, retrieved_residues: dict[str, str],
-                 halogenase: FlavinDependentHalogenases,
+                 halogenase: FlavinDependentHalogenase,
                  hit: HalogenaseHmmResult) -> None:
     """ Looks whether there are hmm hits that meet the requirement for the categorization
         as Tyr, Hpg, or cycline/orsellinic-like halogenase

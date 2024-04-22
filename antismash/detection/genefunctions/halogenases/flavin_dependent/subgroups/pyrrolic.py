@@ -13,7 +13,7 @@ from antismash.common.signature import HmmSignature
 from antismash.detection.genefunctions.halogenases.halogenases import (
     Match,
     HalogenaseHmmResult,
-    FlavinDependentHalogenases)
+    FlavinDependentHalogenase)
 from antismash.detection.genefunctions.halogenases.flavin_dependent import substrate_analysis
 
 SPECIFIC_PROFILES = [HmmSignature("pyrrole_FDH",
@@ -27,7 +27,7 @@ PYRROLE_SIGNATURE_RESIDUES = {"mono_di":"DRSVFW",
                               "unconv_mono_di":"YRRNFN",
                               "tetra":"RRYFFA"}
 
-def search_for_match(retrieved_residues: dict[str, str], halogenase: FlavinDependentHalogenases,
+def search_for_match(retrieved_residues: dict[str, str], halogenase: FlavinDependentHalogenase,
                      hit: HalogenaseHmmResult, cutoff: float, *,
                      expected_residues: Union[str, dict[str,str]] = "", confidence: float = 1
                      ) -> bool:
@@ -59,7 +59,7 @@ def search_for_match(retrieved_residues: dict[str, str], halogenase: FlavinDepen
     return False
 
 def update_match(name: str, retrieved_residues: dict[str, str],
-                 halogenase: FlavinDependentHalogenases,
+                 halogenase: FlavinDependentHalogenase,
                  hit: HalogenaseHmmResult) -> None:
     """ Looks whether there are hmm hits that meet the requirement for the categorization
         as a pyrrole halogenase doing mono/di- or tetra-halogenation

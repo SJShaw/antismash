@@ -13,7 +13,7 @@ from antismash.common.signature import HmmSignature
 from antismash.detection.genefunctions.halogenases.halogenases import (
     Match,
     HalogenaseHmmResult,
-    FlavinDependentHalogenases)
+    FlavinDependentHalogenase)
 from antismash.detection.genefunctions.halogenases.flavin_dependent import substrate_analysis
 
 SPECIFIC_PROFILES = [HmmSignature("trp_5_FDH",
@@ -33,7 +33,7 @@ TRP_6_SIGNATURE = [19, 37, 45, 73, 75, 90, 129, 130, 142, 157, 181, 192, 194, 21
 TRP_5_SIGNATURE_RESIDUES = "VSILIREPGLPRGVPRAVLPGEA"
 TRP_6_SIGNATURE_RESIDUES = "TEGCAGFDAYHDRFGNADYGLSIIAKIL"
 
-def search_for_match(retrieved_residues: str, halogenase: FlavinDependentHalogenases,
+def search_for_match(retrieved_residues: str, halogenase: FlavinDependentHalogenase,
                      hit: HalogenaseHmmResult, position: Union[int, List[int]],
                      cutoffs: List[float], *, check_residues: bool = True,
                      expected_residues: Union[str, dict[str,str]] = "",
@@ -71,7 +71,7 @@ def search_for_match(retrieved_residues: str, halogenase: FlavinDependentHalogen
             return True
     return False
 
-def update_match(name: str, retrieved_residues: str, halogenase: FlavinDependentHalogenases,
+def update_match(name: str, retrieved_residues: str, halogenase: FlavinDependentHalogenase,
                  hit: HalogenaseHmmResult) -> None:
     """ Looks whether there are hmm hits that meet the requirement for the categorization
         as Trp-5, Trp-6, or Trp-7 halogenase

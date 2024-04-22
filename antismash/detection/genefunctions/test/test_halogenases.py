@@ -35,7 +35,7 @@ from antismash.detection.genefunctions.halogenases.flavin_dependent.subgroups im
 from antismash.detection.genefunctions.halogenases import halogenases_analysis
 from antismash.detection.genefunctions.halogenases.halogenases import (
     HalogenaseHmmResult,
-    FlavinDependentHalogenases,
+    FlavinDependentHalogenase,
     Match
 )
 
@@ -175,18 +175,18 @@ class PhenolicBase(unittest.TestCase):
             )
 
         # tyrosine
-        self.tyr_empty_enzyme = FlavinDependentHalogenases("BhaA", "flavin", "FDH")
-        self.tyr_enzyme_with_matches = FlavinDependentHalogenases("BhaA", "flavin", "FDH",
+        self.tyr_empty_enzyme = FlavinDependentHalogenase("BhaA", "flavin", "FDH")
+        self.tyr_enzyme_with_matches = FlavinDependentHalogenase("BhaA", "flavin", "FDH",
                                                                   potential_matches=self.test_tyrosine_match)
 
         # Hpg
-        self.hpg_empty_enzyme = FlavinDependentHalogenases("End30", "flavin", "FDH")
-        self.hpg_enzyme_with_matches = FlavinDependentHalogenases("End30", "flavin", "FDH",
+        self.hpg_empty_enzyme = FlavinDependentHalogenase("End30", "flavin", "FDH")
+        self.hpg_enzyme_with_matches = FlavinDependentHalogenase("End30", "flavin", "FDH",
                                                                   potential_matches=self.test_hpg_match)
 
         # other phenolic-substrate halogenase (orsellinic-like)
-        self.orsellinic_empty_enzyme = FlavinDependentHalogenases("ChlB4", "flavin", "FDH")
-        self.orsellinic_enzyme_with_matches = FlavinDependentHalogenases("ChlB4", "flavin", "FDH",
+        self.orsellinic_empty_enzyme = FlavinDependentHalogenase("ChlB4", "flavin", "FDH")
+        self.orsellinic_enzyme_with_matches = FlavinDependentHalogenase("ChlB4", "flavin", "FDH",
                                                                          potential_matches=self.test_cycline_orsellinic)
 
         self.tyrosine_match_not_hpg = {"Tyr": "GFQRLGDAGLSGVPSYGADPSGLYW",
@@ -195,7 +195,7 @@ class PhenolicBase(unittest.TestCase):
 
 class PyrrolicBase(unittest.TestCase):
     def setUp(self):
-        self.pyrrole_empty_enzyme = FlavinDependentHalogenases("bmp2", "flavin", "FDH")
+        self.pyrrole_empty_enzyme = FlavinDependentHalogenase("bmp2", "flavin", "FDH")
         self.test_pyrrole_match = Match("pyrrole_FDH", "flavin", "FDH",
                                         "tetra", 1, None, "pyrrole")
 
@@ -216,7 +216,7 @@ class PyrrolicBase(unittest.TestCase):
         )
 
         # tetrabrominating halogenase
-        self.pyrrole_enzyme_with_matches = FlavinDependentHalogenases("bmp2", "flavin", "FDH",
+        self.pyrrole_enzyme_with_matches = FlavinDependentHalogenase("bmp2", "flavin", "FDH",
                                                                       potential_matches=[self.test_pyrrole_match])
 
 
@@ -247,13 +247,13 @@ class IndolicBase(unittest.TestCase):
         tryptophan_matches = [self.test_trp_5_match, self.test_trp_6_7_match]
 
         # Trp-5 halogenase
-        self.trp_5_enzyme_with_matches = FlavinDependentHalogenases("mibH", "flavin", "FDH",
+        self.trp_5_enzyme_with_matches = FlavinDependentHalogenase("mibH", "flavin", "FDH",
                                                                     potential_matches=tryptophan_matches)
         # Trp-6 halogenase
-        self.trp_enzyme_with_matches = FlavinDependentHalogenases("ktzR", "flavin", "FDH",
+        self.trp_enzyme_with_matches = FlavinDependentHalogenase("ktzR", "flavin", "FDH",
                                                                   potential_matches=tryptophan_single_matches)
         # Trp-7 halogenase
-        self.trp_empty_enzyme = FlavinDependentHalogenases("ktzQ", "flavin", "FDH")
+        self.trp_empty_enzyme = FlavinDependentHalogenase("ktzQ", "flavin", "FDH")
 
     def specific_analysis_test(self, name, fake_hit,
                                fake_hsps, categorize_return_value,
@@ -270,7 +270,7 @@ class IndolicBase(unittest.TestCase):
                     value.hsps = [fake_hsps]
                 with patch.object(substrate_analysis, "categorize_on_substrate_level",
                                   return_value=categorize_return_value):
-                    with patch.object(FlavinDependentHalogenases, "get_best_match",
+                    with patch.object(FlavinDependentHalogenase, "get_best_match",
                                       return_value=get_best_match_return_value):
                         cds = DummyCDS(locus_tag=name,
                                        translation=test_protein_translations[name])
@@ -289,7 +289,7 @@ class TestPhenolic(PhenolicBase):
             below_cutoff_hit = HalogenaseHmmResult("wrong_name", 400, "wrong_name",
                                                    "foo", "wrong_name")
             assert not categorize_on_substrate_level(DummyCDS(),
-                                                     FlavinDependentHalogenases("ChlB4", "flavin", "FDH"),
+                                                     FlavinDependentHalogenase("ChlB4", "flavin", "FDH"),
                                                      [below_cutoff_hit])
 
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
@@ -454,7 +454,7 @@ class TestIndolic(IndolicBase):
         multiple_matches = self.trp_enzyme_with_matches.get_best_match()
         assert len(multiple_matches) == 2 and isinstance(positive_test_best_match[0], Match)
 
-        one_potential_match = FlavinDependentHalogenases("test_enzyme", "flavin", "FDH",
+        one_potential_match = FlavinDependentHalogenase("test_enzyme", "flavin", "FDH",
                                                          potential_matches=[self.test_trp_5_match])
         multiple_matches = one_potential_match.get_best_match()
         assert len(multiple_matches) == 1 and isinstance(positive_test_best_match[0], Match)
@@ -465,8 +465,8 @@ class TestIndolic(IndolicBase):
         converted_to_json = json.loads(json.dumps(converted_to_json))
         assert isinstance(converted_to_json, dict)
 
-        converted_from_json = FlavinDependentHalogenases.from_json(converted_to_json)
-        assert isinstance(converted_from_json, FlavinDependentHalogenases)
+        converted_from_json = FlavinDependentHalogenase.from_json(converted_to_json)
+        assert isinstance(converted_from_json, FlavinDependentHalogenase)
         assert converted_to_json == converted_from_json.to_json()
 
     @patch.object(subprocessing, "run_hmmsearch",
@@ -526,7 +526,7 @@ class TestIndolic(IndolicBase):
                 assert signature_residues == "dummy"
 
     def test_false_check_for_match(self):
-        false_test = FlavinDependentHalogenases("fake_name", "flavin", "FDH")
+        false_test = FlavinDependentHalogenase("fake_name", "flavin", "FDH")
         false_test_residues = "FAKESEQUENCE"
         FDH_SUBGROUPS["trp_5_FDH"].update_match("trp_5_FDH", false_test_residues,
                                                 false_test, self.trp_6_7_hmm_result)
@@ -582,7 +582,7 @@ class TestIndolic(IndolicBase):
             low_quality_hit = HalogenaseHmmResult("wrong_name", 400, "wrong_name",
                                                   "foo", "wrong_name")
             assert not categorize_on_substrate_level(DummyCDS(),
-                                                     FlavinDependentHalogenases("mibH", "flavin", "FDH"),
+                                                     FlavinDependentHalogenase("mibH", "flavin", "FDH"),
                                                      [low_quality_hit])
 
     @patch.object(indolic, "get_consensus_signature",
@@ -593,9 +593,9 @@ class TestIndolic(IndolicBase):
 
         mock_cds_feature = DummyCDS(locus_tag="mibH", translation=test_protein_translations["mibH"])
         positive_checked_halogenase = categorize_on_substrate_level(mock_cds_feature,
-                                                                    FlavinDependentHalogenases("mibH", "flavin", "FDH"),
+                                                                    FlavinDependentHalogenase("mibH", "flavin", "FDH"),
                                                                     [self.trp_5_hmm_result])
-        assert isinstance(positive_checked_halogenase, FlavinDependentHalogenases)
+        assert isinstance(positive_checked_halogenase, FlavinDependentHalogenase)
         assert positive_checked_halogenase.cds_name == "mibH"
         assert positive_checked_halogenase.potential_matches == [Match(profile='trp_5_FDH', cofactor='flavin', family='FDH',
                                                                        confidence=1.0, consensus_residues='VSILIREPGLPRGVPRAVLPGEA',
@@ -656,13 +656,13 @@ class TestGeneralEnzymes(IndolicBase):
                                     translation=test_protein_translations["CtoA"])
         self.general_match = Match("all_general_FDH", "flavin", "FDH",
                                    None, None, None)
-        self.general_empty_enzyme = FlavinDependentHalogenases("CtoA", "flavin", "FDH")
+        self.general_empty_enzyme = FlavinDependentHalogenase("CtoA", "flavin", "FDH")
 
         self.unconventional_cds = DummyCDS(locus_tag="VatD",
                                            translation=test_protein_translations["VatD"])
         self.unconventional_match = Match("unconventional_FDH", "flavin", "FDH",
                                           None, None, None)
-        self.unconventional_empty_enzyme = FlavinDependentHalogenases("VatD", "flavin", "FDH")
+        self.unconventional_empty_enzyme = FlavinDependentHalogenase("VatD", "flavin", "FDH")
 
     @patch.object(substrate_analysis, "search_residues",
                   return_value="VALAMIVALAMI")
@@ -671,7 +671,7 @@ class TestGeneralEnzymes(IndolicBase):
                                                     FakeHSPHit("unconventional_FDH", "VatD", bitscore=200),
                                                     self.unconventional_empty_enzyme, [],
                                                     fdh_specific_analysis)
-        assert isinstance(positive_test[0], FlavinDependentHalogenases)
+        assert isinstance(positive_test[0], FlavinDependentHalogenase)
         assert positive_test[0].substrates is None
         assert not positive_test[0].consensus_residues
         assert not positive_test[0].potential_matches
