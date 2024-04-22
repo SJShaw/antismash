@@ -78,18 +78,18 @@ def search_for_match(retrieved_residues: Union[dict[str, str], str],
                 modifier = .5
                 continue
             if substrate_counter == 2:
-                halogenase.add_potential_matches(Match(hit.query_id, "flavin", "FDH",
+                halogenase.add_potential_matche(Match(hit.query_id, "flavin", "FDH",
                                                     confidence * modifier,
                                                     retrieved_residues["Hpg"],
                                                     target_positions=position, substrates="Hpg"))
-                halogenase.add_potential_matches(Match(hit.query_id, "flavin", "FDH",
+                halogenase.add_potential_matche(Match(hit.query_id, "flavin", "FDH",
                                                        (confidence * modifier)-0.2,
                                                        retrieved_residues["Tyr"],
                                                        target_positions=position, substrates="Tyr"))
                 return True
 
             if retrieved_residues["Tyr"] == expected_residues["Tyr"]:
-                halogenase.add_potential_matches(Match(hit.query_id, "flavin", "FDH",
+                halogenase.add_potential_matche(Match(hit.query_id, "flavin", "FDH",
                                                     confidence * modifier, retrieved_residues,
                                                     target_positions=position, substrates="Tyr"))
                 return True
@@ -97,7 +97,7 @@ def search_for_match(retrieved_residues: Union[dict[str, str], str],
     if isinstance(cutoffs, int):
         if retrieved_residues != expected_residues or hit.bitscore < cutoffs:
             return False
-        halogenase.add_potential_matches(Match(hit.query_id, "flavin", "FDH",
+        halogenase.add_potential_matche(Match(hit.query_id, "flavin", "FDH",
                                                     confidence * modifier, retrieved_residues,
                                                     target_positions=position,
                                                     substrates="cycline_orsellinic-like"))

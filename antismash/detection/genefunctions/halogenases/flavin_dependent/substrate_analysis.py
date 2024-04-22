@@ -7,7 +7,7 @@
 import logging
 import re
 from collections import defaultdict
-from typing import Union, Optional
+from typing import Optional, Union
 
 from antismash.common.secmet import (
     CDSFeature,
@@ -33,11 +33,14 @@ from antismash.detection.genefunctions.halogenases.flavin_dependent.subgroups im
 )
 
 # pHMM ids and the submodules they belong to for use in calling submodule-specific functions
-FDH_SUBGROUPS = {"trp_5_FDH":indolic,
-                 "trp_6_7_FDH":indolic,
-                 "cycline_orsellinic_FDH":phenolic,
-                 "tyrosine-like_hpg_FDH":phenolic,
-                 "pyrrole_FDH":pyrrolic}
+FDH_SUBGROUPS = {
+    "trp_5_FDH": indolic,
+    "trp_6_7_FDH": indolic,
+    "cycline_orsellinic_FDH": phenolic,
+    "tyrosine-like_hpg_FDH": phenolic,
+    "pyrrole_FDH": pyrrolic,
+}
+
 
 def _get_substrate_specific_profiles() -> list:
     """ Collects the substrate-specific pHMM profiles from the substrate-specific submodules"""
@@ -69,10 +72,11 @@ def retrieve_fdh_signature_residues(translation: str, hmm_result: HalogenaseHmmR
         residue = search_residues(translation, signatures, hmm_result)
         signature_residues[hmm_result.query_id] = residue
     else:
-        substrates_signatures = dict(zip(enzyme_substrates,signatures))
+        substrates_signatures = dict(zip(enzyme_substrates, signatures))
         for substrate, signature in substrates_signatures.items():
             signature_residues[substrate] = search_residues(translation, signature, hmm_result)
     return signature_residues
+
 
 def search_residues(sequence: str, positions: Union[list[int], list[list[int]]],
                     hmm_result: HalogenaseHmmResult,
@@ -114,6 +118,7 @@ def search_residues(sequence: str, positions: Union[list[int], list[list[int]]],
                                                  [p - offset for p in positions if offset < p])
     return sites
 
+
 def search_conserved_motif(cds: CDSFeature, motif_positions: list[int],
                            hmm_result: HalogenaseHmmResult,
                            motif_pattern: str) -> str:
@@ -143,6 +148,7 @@ def search_conserved_motif(cds: CDSFeature, motif_positions: list[int],
     categorized = (re.search(f"{motif_pattern}", signature_residues) or [])[0]
     return categorized
 
+
 def run_halogenase_phmms(cluster_fasta: str, profiles: list
                          ) -> dict[str, list[HalogenaseHmmResult]]:
     """ Check if protein sequences hit any pHMM
@@ -163,7 +169,6 @@ def run_halogenase_phmms(cluster_fasta: str, profiles: list
                                               hsp.query_id, sig.name, sig.path)
                     halogenase_hmms_by_id[hsp.hit_id].append(hit)
     return halogenase_hmms_by_id
-
 
 
 def categorize_on_substrate_level(cds: CDSFeature, halogenase_match: FlavinDependentHalogenase,
@@ -191,17 +196,18 @@ def categorize_on_substrate_level(cds: CDSFeature, halogenase_match: FlavinDepen
             if not specific_signature_residues:
                 return None
             FDH_SUBGROUPS[hit.query_id].update_match(hit.query_id,
-                                                    specific_signature_residues,
-                                                    halogenase_match, hit)
+                                                     specific_signature_residues,
+                                                     halogenase_match, hit)
     if not halogenase_match.potential_matches:
         return None
 
     return halogenase_match
 
+
 def categorize_on_consensus_level(cds: CDSFeature, specific_hmm_hits: list[HalogenaseHmmResult],
                                   general_hmm_hits: list[HalogenaseHmmResult]
                                   ) -> FlavinDependentHalogenase:
-    enzyme = FlavinDependentHalogenase(cds.get_name(), cofactor="flavin", family="FDH")
+    enzyme = FlavinDependentHalogenase(cds.get_name())
     if specific_hmm_hits:
         enzyme = categorize_on_substrate_level(cds, enzyme, specific_hmm_hits) \
                     or enzyme
@@ -219,6 +225,7 @@ def categorize_on_consensus_level(cds: CDSFeature, specific_hmm_hits: list[Halog
         enzyme.consensus_residues = conserved_motifs
 
     return enzyme
+
 
 def fdh_specific_analysis(record: Record) -> Union[list, list[FlavinDependentHalogenase]]:
     """ Categorization of enzyme, categorizes any halogenase in a cds in regions
