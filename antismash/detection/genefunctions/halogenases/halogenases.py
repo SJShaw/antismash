@@ -4,7 +4,7 @@
 # for test files, silence irrelevant and noisy pylint warnings
 # pylint: disable=use-implicit-booleaness-not-comparison,protected-access,missing-docstring
 
-from typing import Any, Optional, Iterable, Self, Union
+from typing import Any, ClassVar, Iterable, Optional, Self, Union
 
 from dataclasses import dataclass, field
 
@@ -61,8 +61,6 @@ class Match:
 @dataclass
 class FlavinDependentHalogenase:
     cds_name: str
-    cofactor: str
-    family: str
     confidence: float = 0
     consensus_residues: Optional[Union[str, dict[str, str]]] = None
     substrates: Union[str, list[str], None] = None
@@ -70,7 +68,10 @@ class FlavinDependentHalogenase:
     number_of_decorations: Optional[str] = None
     potential_matches: list[Match] = field(default_factory=list)
 
-    def add_potential_matches(self, match: Match) -> None:
+    cofactor: ClassVar[str] = "flavin"
+    family: ClassVar[str] = "FDH"
+
+    def add_potential_matche(self, match: Match) -> None:
         """ Adds the features of an enzyme group to list"""
         self.potential_matches.append(match)
 
@@ -87,7 +88,7 @@ class FlavinDependentHalogenase:
 
             highest_confidence = max(profile.confidence for profile in self.potential_matches)
             for profile in self.potential_matches:
-                if abs(profile.confidence-highest_confidence) <= 0.005:
+                if abs(profile.confidence - highest_confidence) <= 0.005:
                     best_match.append(profile)
 
         return best_match
@@ -104,8 +105,8 @@ class FlavinDependentHalogenase:
 
         if len(best_matches) == 1:
             best_match = best_matches[0]
-            self.cofactor = best_match.cofactor
-            self.family = best_match.family
+            assert best_match.cofactor == self.cofactor
+            assert best_match.family == self.family
             self.target_positions = best_match.target_positions
             self.consensus_residues = best_match.consensus_residues
             self.confidence = best_match.confidence
@@ -130,18 +131,19 @@ class FlavinDependentHalogenase:
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> Self:
-        """ Constructs the TailoringEnzymes from the JSON representation """
+        """ Constructs an instance from a JSON representation """
+
+        assert data.pop("cofactor") == cls.cofactor
+        assert data.pop("family") == cls.family
 
         cds_name = data["cds_name"]
-        family = data["family"]
-        cofactor = data["cofactor"]
         substrates = data["substrates"]
         target_positions = data["target_positions"]
         number_of_decorations = data["number_of_decorations"]
         consensus_residues = data["consensus_residues"]
         confidence = data["confidence"]
         potential_matches = [Match.from_json(profile) for profile in data["potential_matches"]]
-        enzyme = cls(cds_name, cofactor, family, confidence,
+        enzyme = cls(cds_name, confidence,
                      consensus_residues, substrates, target_positions,
                      number_of_decorations, potential_matches)
         return enzyme
