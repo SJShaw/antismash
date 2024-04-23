@@ -36,7 +36,7 @@ TRP_6_SIGNATURE_RESIDUES = "TEGCAGFDAYHDRFGNADYGLSIIAKIL"
 def search_for_match(retrieved_residues: str, halogenase: FlavinDependentHalogenase,
                      hit: HalogenaseHmmResult, position: int,
                      cutoffs: list[float], *, check_residues: bool = True,
-                     expected_residues: Union[str, dict[str,str]] = "",
+                     expected_residues: str = "",
                      confidence: float = 1) -> bool:
     """ Looks whether there are hmm hits that meet the requirement for the categorization
 
@@ -63,7 +63,7 @@ def search_for_match(retrieved_residues: str, halogenase: FlavinDependentHalogen
             modifier = .5
             continue
         if retrieved_residues == expected_residues or not check_residues:
-            halogenase.add_potential_matche(Match(hit.query_id,"flavin", "FDH",
+            halogenase.add_potential_matche(Match(hit.query_id, "flavin", "FDH",
                                                    confidence * modifier, retrieved_residues,
                                                    target_positions=[position],
                                                    number_of_decorations="mono",
