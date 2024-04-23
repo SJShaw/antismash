@@ -136,14 +136,23 @@ TRANSLATIONS = {
 }
 
 
+def create_flavin_match(profile, confidence=0., consensus_residues="", substrates=None,
+                        target_positions=None, number_of_decorations=None,
+                        ):
+     return Match(profile, "flavin", "FDH",
+        confidence=confidence,
+        consensus_residues=consensus_residues,
+        substrates=substrates,
+        target_positions=target_positions,
+        number_of_decorations=number_of_decorations,
+    )
+
+
 class PhenolicBase(unittest.TestCase):
     def setUp(self):
-        self.test_tyrosine_match = Match("tyrosine-like_hpg_FDH",
-                                         None, 1, None, "Tyr")
-        self.test_hpg_match = Match("tyrosine-like_hpg_FDH",
-                                    None, 1, None, "Hpg")
-        self.test_cycline_orsellinic = Match("cycline_orsellinic_FDH",
-                                             None, 1, None, "orsellinic")
+        self.test_tyrosine_match = create_flavin_match("tyrosine-like_hpg_FDH", confidence=1., substrates="Tyr")
+        self.test_hpg_match = create_flavin_match("tyrosine-like_hpg_FDH", confidence=1, substrates="Hpg")
+        self.test_cycline_orsellinic = create_flavin_match("cycline_orsellinic_FDH", confidence=1., substrates="orsellinic")
 
         self.tyrosine_hmm_result = HalogenaseHmmResult(
             hit_id='tyrosine-like_hpg_FDH',
@@ -193,7 +202,7 @@ class PhenolicBase(unittest.TestCase):
 class PyrrolicBase(unittest.TestCase):
     def setUp(self):
         self.pyrrole_empty_enzyme = FDH("bmp2")
-        self.test_pyrrole_match = Match("pyrrole_FDH", "tetra", 1, None, "pyrrole")
+        self.test_pyrrole_match = Match("pyrrole_FDH", "tetra", "unknown cofactor", 1, "", "pyrrole")
 
         self.pyrrole_hmm_result = HalogenaseHmmResult(
             hit_id='pyrrole_FDH',
@@ -217,10 +226,8 @@ class PyrrolicBase(unittest.TestCase):
 
 class IndolicBase(unittest.TestCase):
     def setUp(self):
-        self.test_trp_5_match = Match("trp_5_FDH", "flavin", "FDH", 1, None,
-                                      "tryptophan", 5, "mono")
-        self.test_trp_6_7_match = Match("trp_6_7_FDH", "flavin", "FDH", 1, "",
-                                        "tryptophan", 6, "mono")
+        self.test_trp_5_match = create_flavin_match("trp_5_FDH", confidence=1, substrates="tryptophan", target_positions=5, number_of_decorations="mono")
+        self.test_trp_6_7_match = create_flavin_match("trp_6_7_FDH", confidence=1, consensus_residues="", substrates="tryptophan", target_positions=6, number_of_decorations="mono")
 
         self.trp_5_hmm_result = HalogenaseHmmResult(
             hit_id='trp_5_FDH',
@@ -592,10 +599,10 @@ class TestIndolic(IndolicBase):
         assert isinstance(positive_checked_halogenase, FDH)
         assert positive_checked_halogenase.cds_name == "mibH"
         assert positive_checked_halogenase.potential_matches == [
-            Match(profile='trp_5_FDH', cofactor='flavin', family='FDH',
-                  confidence=1.0, consensus_residues='VSILIREPGLPRGVPRAVLPGEA',
-                  substrates='tryptophan', target_positions=5,
-                  number_of_decorations='mono')
+            create_flavin_match(profile="trp_5_FDH", confidence=1.0,
+                                consensus_residues="VSILIREPGLPRGVPRAVLPGEA",
+                                substrates="tryptophan", target_positions=5,
+                                number_of_decorations="mono")
         ]
 
 
@@ -650,14 +657,12 @@ class TestGeneralEnzymes(IndolicBase):
         self.record = DummyRecord()
         self.general_cds = DummyCDS(locus_tag="CtoA",
                                     translation=TRANSLATIONS["CtoA"])
-        self.general_match = Match("all_general_FDH", "flavin", "FDH",
-                                   None, None, None)
+        self.general_match = create_flavin_match("all_general_FDH")
         self.general_empty_enzyme = FDH("CtoA")
 
         self.unconventional_cds = DummyCDS(locus_tag="VatD",
                                            translation=TRANSLATIONS["VatD"])
-        self.unconventional_match = Match("unconventional_FDH", "flavin", "FDH",
-                                          None, None, None)
+        self.unconventional_match = create_flavin_match("unconventional_FDH")
         self.unconventional_empty_enzyme = FDH("VatD")
 
     @patch.object(substrate_analysis, "search_residues",
