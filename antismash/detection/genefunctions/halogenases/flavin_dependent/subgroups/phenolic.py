@@ -5,7 +5,7 @@
 # pylint: disable=use-implicit-booleaness-not-comparison,protected-access,missing-docstring
 
 from pathlib import Path
-from typing import Union, List
+from typing import Union
 
 from antismash.common.secmet import CDSFeature
 from antismash.common.path import get_full_path
@@ -41,7 +41,7 @@ OTHER_PHENOLIC_SIGNATURE_RESIDUES = "LGPRGGRDAGVDAGGYGFDPSG"
 def search_for_match(retrieved_residues: Union[dict[str, str], str],
                      halogenase: FlavinDependentHalogenase,
                      hit: HalogenaseHmmResult, positions: list[int],
-                     cutoffs: Union[List[int], int], *,
+                     cutoffs: Union[list[int], int], *,
                      expected_residues: Union[str, dict[str, str]],
                      confidence: float = 1.) -> bool:
     """ Looks whether there are hmm hits that meet the requirement for the categorization
