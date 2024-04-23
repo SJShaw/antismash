@@ -190,14 +190,15 @@ def categorize_on_substrate_level(cds: CDSFeature, halogenase_match: FlavinDepen
         return None
 
     for hit in hmm_results:
-        if hit.query_id in FDH_SUBGROUPS:
-            signature_residues = FDH_SUBGROUPS[hit.query_id].get_consensus_signature(cds, hit)
-            specific_signature_residues = signature_residues[hit.query_id]
-            if not specific_signature_residues:
-                return None
-            FDH_SUBGROUPS[hit.query_id].update_match(hit.query_id,
-                                                     specific_signature_residues,
-                                                     halogenase_match, hit)
+        if hit.query_id not in FDH_SUBGROUPS:
+            raise ValueError(f"unknown profile identifier: {hit.query_id}")
+        signature_residues = FDH_SUBGROUPS[hit.query_id].get_consensus_signature(cds, hit)
+        specific_signature_residues = signature_residues[hit.query_id]
+        if not specific_signature_residues:
+            return None
+        FDH_SUBGROUPS[hit.query_id].update_match(hit.query_id,
+                                                 specific_signature_residues,
+                                                 halogenase_match, hit)
     if not halogenase_match.potential_matches:
         return None
 

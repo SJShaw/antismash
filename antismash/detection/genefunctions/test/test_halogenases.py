@@ -274,16 +274,14 @@ class IndolicBase(unittest.TestCase):
 
 
 class TestPhenolic(PhenolicBase):
+    def test_invalid_profile(self):
+        invalid_hit = HalogenaseHmmResult("wrong_name", 400, "wrong_name",
+                                               "foo", "wrong_name")
+        with self.assertRaisesRegex(ValueError, "unknown profile"):
+            categorize_on_substrate_level(DummyCDS(), FDH("ChlB4"), [invalid_hit])
+
     def test_categorize_on_substrate_level(self):
         # Other phenolic (orsellinic-like) substrate halogenases
-        with patch.object(substrate_analysis,
-                          "retrieve_fdh_signature_residues", return_value=""):
-            below_cutoff_hit = HalogenaseHmmResult("wrong_name", 400, "wrong_name",
-                                                   "foo", "wrong_name")
-        assert not categorize_on_substrate_level(DummyCDS(),
-                                                 FDH("ChlB4"),
-                                                 [below_cutoff_hit])
-
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
                           return_value={"cycline_orsellinic_FDH": phenolic.OTHER_PHENOLIC_SIGNATURE_RESIDUES}):
             categorize_on_substrate_level(DummyCDS(), self.orsellinic_empty_enzyme,
@@ -576,14 +574,11 @@ class TestIndolic(IndolicBase):
             assert categorize_on_substrate_level(DummyCDS(), self.trp_empty_enzyme,
                                                  self.trp_6_7_hmm_result) is None
 
-    def test_invalid_profile_name(self):
-        with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
-                          return_value=""):
-            low_quality_hit = HalogenaseHmmResult("wrong_name", 400, "wrong_name",
-                                                  "foo", "wrong_name")
-            assert not categorize_on_substrate_level(DummyCDS(),
-                                                     FDH("mibH"),
-                                                     [low_quality_hit])
+    def test_invalid_profile(self):
+        invalid_hit = HalogenaseHmmResult("wrong_name", 400, "wrong_name",
+                                          "foo", "wrong_name")
+        with self.assertRaisesRegex(ValueError, "unknown profile"):
+            categorize_on_substrate_level(DummyCDS(), FDH("mibH"), [invalid_hit])
 
     @patch.object(indolic, "get_consensus_signature",
                   return_value={'trp_5_FDH': 'VSILIREPGLPRGVPRAVLPGEA'})
