@@ -19,13 +19,12 @@ from unittest.mock import patch
 
 from antismash.common import utils, secmet, subprocessing
 from antismash.common.subprocessing import hmmscan
-
-# fake classes for testing
 from antismash.common.secmet.test.helpers import (
     DummyRecord,
     DummyFeature,
     DummyCDS,
 )
+from antismash.common.signature import HmmSignature
 from antismash.common.test.helpers import FakeHSPHit, FakeHit
 from antismash.detection.genefunctions.halogenases.flavin_dependent.subgroups import (
     indolic,
@@ -469,16 +468,18 @@ class TestIndolic(IndolicBase):
     @patch.object(subprocessing, "run_hmmsearch",
                   return_value=[FakeHit(1, 2, 1000, "foo")])
     def test_run_halogenase_phmms(self, run_hmmsearch):
+        signature = HmmSignature("foo", "description", 300, "dummy_path")
         for value in run_hmmsearch.return_value:
             value.hsps = [FakeHSPHit("foo", "foo", bitscore=250)]
 
-        negative_test_halogenase_hmms_by_id = run_halogenase_phmms("", [])
+        negative_test_halogenase_hmms_by_id = run_halogenase_phmms("", [signature])
         assert not negative_test_halogenase_hmms_by_id
 
         for value in run_hmmsearch.return_value:
             value.hsps = [FakeHSPHit("foo", "foo", bitscore=1000)]
 
-        positive_test_halogenase_hmms_by_id = run_halogenase_phmms("", [])
+        positive_test_halogenase_hmms_by_id = run_halogenase_phmms("", [signature])
+        assert positive_test_halogenase_hmms_by_id
         for hit in positive_test_halogenase_hmms_by_id["foo"]:
             assert isinstance(hit, HalogenaseHmmResult)
 
@@ -535,11 +536,12 @@ class TestIndolic(IndolicBase):
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
                           return_value={"trp_5_FDH": indolic.TRP_5_SIGNATURE_RESIDUES}):
             categorize_on_substrate_level(DummyCDS(), self.trp_empty_enzyme, [self.trp_5_hmm_result])
-        assert self.trp_empty_enzyme.potential_matches[0].profile == "trp_5_FDH"
-        assert self.trp_empty_enzyme.potential_matches[0].confidence == 1
-        assert self.trp_empty_enzyme.potential_matches[0].substrates == ["tryptophan"]
-        assert self.trp_empty_enzyme.potential_matches[0].number_of_decorations == "mono"
-        assert self.trp_empty_enzyme.potential_matches[0].target_positions == [5]
+        match = self.trp_empty_enzyme.potential_matches[0]
+        assert match.profile == "trp_5_FDH"
+        assert match.confidence == 1
+        assert match.substrates == ["tryptophan"]
+        assert match.number_of_decorations == "mono"
+        assert match.target_positions == [5]
 
     def test_weak_trp_5(self):
         with patch.object(indolic, "get_consensus_signature",
@@ -547,22 +549,24 @@ class TestIndolic(IndolicBase):
             low_quality_hit = HalogenaseHmmResult("trp_5_FDH", 380, "trp_5_FDH",
                                                   "foo", "trp_5_FDH")
             categorize_on_substrate_level(DummyCDS(), self.trp_empty_enzyme, [low_quality_hit])
-        assert self.trp_empty_enzyme.potential_matches[0].profile == "trp_5_FDH"
-        assert self.trp_empty_enzyme.potential_matches[0].confidence == 0.5
-        assert self.trp_empty_enzyme.potential_matches[0].substrates ==[ "tryptophan"]
-        assert self.trp_empty_enzyme.potential_matches[0].number_of_decorations == "mono"
-        assert self.trp_empty_enzyme.potential_matches[0].target_positions == [5]
+        match = self.trp_empty_enzyme.potential_matches[0]
+        assert match.profile == "trp_5_FDH"
+        assert match.confidence == 0.5
+        assert match.substrates == ["tryptophan"]
+        assert match.number_of_decorations == "mono"
+        assert match.target_positions == [5]
 
     def test_trp_6(self):
         with patch.object(indolic, "get_consensus_signature",
                           return_value={"trp_6_7_FDH": indolic.TRP_6_SIGNATURE_RESIDUES}):
             categorize_on_substrate_level(DummyCDS(), self.trp_empty_enzyme,
                                           [self.trp_6_7_hmm_result])
-        assert self.trp_empty_enzyme.potential_matches[0].profile == "trp_6_7_FDH"
-        assert self.trp_empty_enzyme.potential_matches[0].confidence == 1
-        assert self.trp_empty_enzyme.potential_matches[0].target_positions == [6]
-        assert self.trp_empty_enzyme.potential_matches[0].substrates == ["tryptophan"]
-        assert self.trp_empty_enzyme.potential_matches[0].number_of_decorations == "mono"
+        match = self.trp_empty_enzyme.potential_matches[0]
+        assert match.profile == "trp_6_7_FDH"
+        assert match.confidence == 1.0
+        assert match.substrates == ["tryptophan"]
+        assert match.number_of_decorations == "mono"
+        assert match.target_positions == [6]
 
     def test_trp_7(self):
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
@@ -609,7 +613,6 @@ class TestIndolic(IndolicBase):
 class TestSpecificAnalysis(IndolicBase):
     def setUp(self):
         super().setUp()
-        self.record = DummyRecord()
 
     # one best match
     def test_one_best_match(self):
@@ -643,12 +646,11 @@ class TestSpecificAnalysis(IndolicBase):
     def test_no_hits(self, _patched_hmmscan):
         cds = DummyCDS(locus_tag="mibH",
                        translation=TRANSLATIONS["mibH"])
-        record = self.record
-        record.add_cds_feature(cds)
+        record = DummyRecord(features=[cds])
         with patch.object(secmet.Record, "get_cds_features_within_regions", return_value=[cds]):
-            test_no_hitstest = fdh_specific_analysis(record)
+            results = fdh_specific_analysis(record)
 
-        assert test_no_hitstest == []
+        assert results == []
 
 
 class TestGeneralEnzymes(IndolicBase):
