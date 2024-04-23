@@ -71,7 +71,7 @@ class FlavinDependentHalogenase:
     cofactor: ClassVar[str] = "flavin"
     family: ClassVar[str] = "FDH"
 
-    def add_potential_matche(self, match: Match) -> None:
+    def add_potential_match(self, match: Match) -> None:
         """ Adds the features of an enzyme group to list"""
         self.potential_matches.append(match)
 
