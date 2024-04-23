@@ -145,9 +145,9 @@ def search_conserved_motif(cds: CDSFeature, motif_positions: list[int],
         return categorized
 
     motif = re.search(motif_pattern, signature_residues)
-    if not motif:
-        return categorized
-    categorized = (re.search(f"{motif_pattern}", signature_residues) or [])[0]
+    if motif:
+        return motif[0]
+
     return categorized
 
 
