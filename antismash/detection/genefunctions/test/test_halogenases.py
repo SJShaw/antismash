@@ -446,7 +446,7 @@ class TestIndolic(IndolicBase):
 
         assert len(positive_test_best_match) == 1 and isinstance(positive_test_best_match[0], Match)
 
-        self.trp_enzyme_with_matches.add_potential_matche(self.test_trp_6_7_match)
+        self.trp_enzyme_with_matches.add_potential_match(self.test_trp_6_7_match)
         assert len(self.trp_enzyme_with_matches.potential_matches) == 2
 
         multiple_matches = self.trp_enzyme_with_matches.get_best_matches()

@@ -63,7 +63,7 @@ def search_for_match(retrieved_residues: str, halogenase: FlavinDependentHalogen
             modifier = .5
             continue
         if retrieved_residues == expected_residues or not check_residues:
-            halogenase.add_potential_matche(Match(hit.query_id, "flavin", "FDH",
+            halogenase.add_potential_match(Match(hit.query_id, "flavin", "FDH",
                                                    confidence * modifier, retrieved_residues,
                                                    target_positions=[position],
                                                    number_of_decorations="mono",
