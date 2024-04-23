@@ -184,15 +184,12 @@ class PhenolicBase(unittest.TestCase):
 
         # tyrosine
         self.tyr_empty_enzyme = FDH("BhaA")
-        self.tyr_enzyme_with_matches = FDH("BhaA", potential_matches=self.test_tyrosine_match)
 
         # Hpg
         self.hpg_empty_enzyme = FDH("End30")
-        self.hpg_enzyme_with_matches = FDH("End30", potential_matches=self.test_hpg_match)
 
         # other phenolic-substrate halogenase (orsellinic-like)
         self.orsellinic_empty_enzyme = FDH("ChlB4")
-        self.orsellinic_enzyme_with_matches = FDH("ChlB4", potential_matches=self.test_cycline_orsellinic)
 
         self.tyrosine_match_not_hpg = {"Tyr": "GFQRLGDAGLSGVPSYGADPSGLYW",
                                        "Hpg": "VALAMI"}
@@ -218,9 +215,6 @@ class PyrrolicBase(unittest.TestCase):
             enzyme_type="FDH",
             profile=pyrrolic.SPECIFIC_PROFILES[0].path
         )
-
-        # tetrabrominating halogenase
-        self.pyrrole_enzyme_with_matches = FDH("bmp2", potential_matches=[self.test_pyrrole_match])
 
 
 class IndolicBase(unittest.TestCase):
@@ -652,15 +646,8 @@ class TestSpecificAnalysis(IndolicBase):
 class TestGeneralEnzymes(IndolicBase):
     def setUp(self):
         super().setUp()
-        self.record = DummyRecord()
-        self.general_cds = DummyCDS(locus_tag="CtoA",
-                                    translation=TRANSLATIONS["CtoA"])
-        self.general_match = create_flavin_match("all_general_FDH")
-        self.general_empty_enzyme = FDH("CtoA")
 
-        self.unconventional_cds = DummyCDS(locus_tag="VatD",
-                                           translation=TRANSLATIONS["VatD"])
-        self.unconventional_match = create_flavin_match("unconventional_FDH")
+        self.general_empty_enzyme = FDH("CtoA")
         self.unconventional_empty_enzyme = FDH("VatD")
 
     @patch.object(substrate_analysis, "search_residues",
