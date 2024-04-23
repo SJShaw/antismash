@@ -138,7 +138,7 @@ TRANSLATIONS = {
 def create_flavin_match(profile, confidence=0., consensus_residues="", substrates=None,
                         target_positions=None, number_of_decorations=None,
                         ):
-     return Match(profile, "flavin", "FDH",
+    return Match(profile, "flavin", "FDH",
         confidence=confidence,
         consensus_residues=consensus_residues,
         substrates=substrates,
@@ -149,9 +149,10 @@ def create_flavin_match(profile, confidence=0., consensus_residues="", substrate
 
 class PhenolicBase(unittest.TestCase):
     def setUp(self):
-        self.test_tyrosine_match = create_flavin_match("tyrosine-like_hpg_FDH", confidence=1., substrates="Tyr")
-        self.test_hpg_match = create_flavin_match("tyrosine-like_hpg_FDH", confidence=1, substrates="Hpg")
-        self.test_cycline_orsellinic = create_flavin_match("cycline_orsellinic_FDH", confidence=1., substrates="orsellinic")
+        self.test_tyrosine_match = create_flavin_match("tyrosine-like_hpg_FDH",
+                                                        confidence=1., substrates="Tyr")
+        self.test_hpg_match = create_flavin_match("tyrosine-like_hpg_FDH", confidence=1.,
+                                                  substrates="Hpg")
 
         self.tyrosine_hmm_result = HalogenaseHmmResult(
             hit_id="tyrosine-like_hpg_FDH",
@@ -274,8 +275,7 @@ class IndolicBase(unittest.TestCase):
 
 class TestPhenolic(PhenolicBase):
     def test_invalid_profile(self):
-        invalid_hit = HalogenaseHmmResult("wrong_name", 400, "wrong_name",
-                                               "foo", "wrong_name")
+        invalid_hit = HalogenaseHmmResult("wrong_name", 400, "wrong_name", "foo", "wrong_name")
         with self.assertRaisesRegex(ValueError, "unknown profile"):
             categorize_on_substrate_level(DummyCDS(), FDH("ChlB4"), [invalid_hit])
 
