@@ -4,12 +4,4 @@
 # for test files, silence irrelevant and noisy pylint warnings
 # pylint: disable=use-implicit-booleaness-not-comparison,protected-access,missing-docstring
 
-from typing import Optional
-
-from antismash.common.secmet import Record
-from antismash.detection.genefunctions.halogenases.halogenases import FlavinDependentHalogenase
-from .flavin_dependent.substrate_analysis import fdh_specific_analysis
-
-def specific_analysis(record: Record)\
-    -> Optional[list[FlavinDependentHalogenase]]:
-    return fdh_specific_analysis(record)
+from .flavin_dependent.substrate_analysis import fdh_specific_analysis as specific_analysis

@@ -11,17 +11,19 @@ from typing import Optional, Union
 
 from antismash.common.secmet import (
     CDSFeature,
-    Record)
+    Record,
+)
 
 from antismash.common import (
     subprocessing,
     fasta,
-    utils)
+    utils,
+)
 
 from antismash.detection.genefunctions.halogenases.halogenases import (
     FlavinDependentHalogenase,
-    HalogenaseHmmResult
-    )
+    HalogenaseHmmResult,
+)
 
 
 from antismash.common.subprocessing import hmmscan
@@ -161,8 +163,8 @@ def run_halogenase_phmms(cluster_fasta: str, profiles: list
     """
     halogenase_hmms_by_id: dict = defaultdict(list)
     for sig in profiles:
-        runresults = subprocessing.run_hmmsearch(sig.hmm_file, cluster_fasta)
-        for runresult in runresults:
+        run_results = subprocessing.run_hmmsearch(sig.hmm_file, cluster_fasta)
+        for runresult in run_results:
             for hsp in runresult.hsps:
                 if hsp.bitscore > sig.cutoff:
                     hit = HalogenaseHmmResult(hsp.hit_id, hsp.bitscore,
@@ -205,7 +207,7 @@ def categorize_on_substrate_level(cds: CDSFeature, halogenase_match: FlavinDepen
 
 
 def categorize_on_consensus_level(cds: CDSFeature, specific_hmm_hits: list[HalogenaseHmmResult],
-                                  general_hmm_hits: list[HalogenaseHmmResult]
+                                  general_hmm_hits: list[HalogenaseHmmResult],
                                   ) -> FlavinDependentHalogenase:
     enzyme = FlavinDependentHalogenase(cds.get_name())
     if specific_hmm_hits:
@@ -230,10 +232,11 @@ def categorize_on_consensus_level(cds: CDSFeature, specific_hmm_hits: list[Halog
 def fdh_specific_analysis(record: Record) -> list[FlavinDependentHalogenase]:
     """ Categorization of enzyme, categorizes any halogenase in a cds in regions
 
-        Arguments: record instance,
-                   which holds information of the identified clusters
+        Arguments:
+            record: the record instance to analyse
 
-        Returns: list of HalogenasesResults instances representing halogenase enzymes,
+        Returns:
+            a list of HalogenasesResults instances representing halogenase enzymes,
                  if there is a clear best match for a given enzyme, then the information
                  about the position of halogenation, the confidence of the categorization,
                  and the characteristic residues is provided.
@@ -244,9 +247,7 @@ def fdh_specific_analysis(record: Record) -> list[FlavinDependentHalogenase]:
 
     potential_enzymes = []
     enzymes_with_hits = []
-    features = record.get_cds_features_within_regions()
-    # assert features
-    hmmsearch_fasta = fasta.get_fasta_from_features(features)
+    hmmsearch_fasta = fasta.get_fasta_from_features(record.get_cds_features_within_regions())
 
     hits = hmmscan.run_hmmscan(substrates.ALL_FDH_PROFILES,
                                hmmsearch_fasta)
@@ -257,12 +258,10 @@ def fdh_specific_analysis(record: Record) -> list[FlavinDependentHalogenase]:
         return []
 
     hit_enzyme_fasta = fasta.get_fasta_from_features(enzymes_with_hits)
-    general_hmm_hits = run_halogenase_phmms(hit_enzyme_fasta,
-                                            substrates.GENERAL_FDH_PROFILES)
+    general_hmm_hits = run_halogenase_phmms(hit_enzyme_fasta, substrates.GENERAL_FDH_PROFILES)
     if general_hmm_hits:
         specific_profiles = _get_substrate_specific_profiles()
-        specific_hmm_hits = run_halogenase_phmms(hit_enzyme_fasta,
-                                                 specific_profiles)
+        specific_hmm_hits = run_halogenase_phmms(hit_enzyme_fasta, specific_profiles)
 
     for protein in general_hmm_hits:
         cds = record.get_cds_by_name(protein)
