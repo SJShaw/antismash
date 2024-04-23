@@ -4,7 +4,6 @@
 # for test files, silence irrelevant and noisy pylint warnings
 # pylint: disable=use-implicit-booleaness-not-comparison,protected-access,missing-docstring
 
-import logging
 import re
 from collections import defaultdict
 from typing import Optional, Union
@@ -98,7 +97,6 @@ def search_residues(sequence: str, positions: Union[list[int], list[list[int]]],
     results = subprocessing.hmmpfam.run_hmmpfam2(hmm_result.profile,
                                                  f">query\n{sequence}", extra_args=args)
     if not (results and results[0].hsps):
-        logging.debug("no hits for query %s")
         return None
 
     found = False
@@ -109,8 +107,6 @@ def search_residues(sequence: str, positions: Union[list[int], list[list[int]]],
             break
 
     if not found:
-        logging.debug(
-            "no hits for the enzyme in %s", hmm_result.query_id)
         return None
 
     profile = hit.aln[1].seq
