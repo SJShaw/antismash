@@ -39,7 +39,7 @@ from antismash.detection.genefunctions.halogenases.halogenases import (
     Match,
 )
 
-from antismash.detection.genefunctions.halogenases.flavin_dependent import substrate_analysis, substrates
+from antismash.detection.genefunctions.halogenases.flavin_dependent import substrate_analysis
 from antismash.detection.genefunctions.halogenases.flavin_dependent.substrate_analysis import (
     run_halogenase_phmms,
     search_residues,
@@ -611,10 +611,6 @@ class TestIndolic(IndolicBase):
 
 
 class TestSpecificAnalysis(IndolicBase):
-    def setUp(self):
-        super().setUp()
-
-    # one best match
     def test_one_best_match(self):
         positive_test = self.specific_analysis_test("ktzR",
                                                     FakeHit(1, 2, 900, "ktzR"),
@@ -697,8 +693,7 @@ class TestGeneralEnzymes(IndolicBase):
         result = substrate_analysis.categorize_on_consensus_level(
             DummyCDS(locus_tag="CtoA", translation=TRANSLATIONS["CtoA"]),
             {},
-            [HalogenaseHmmResult("CtoA", 200, "all_conventional_FDH", "FDH",
-                                 substrates.GENERAL_FDH_PROFILES[0].path)],
+            [HalogenaseHmmResult("CtoA", 200, "all_conventional_FDH", "FDH", "dummy_path")],
         )
         assert result.consensus_residues == {"W.W.I.": "WIWVIR"}
         assert result.substrates is None
