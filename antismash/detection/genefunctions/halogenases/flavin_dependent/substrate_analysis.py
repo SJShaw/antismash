@@ -184,7 +184,6 @@ def categorize_on_substrate_level(cds: CDSFeature, halogenase_match: FlavinDepen
             If it doesn't meet the requirements, it doesn't make changes on the original instance.
     """
     if not hmm_results:
-        logging.debug("Hmmsearch did not return any hit.")
         return None
 
     for hit in hmm_results:
