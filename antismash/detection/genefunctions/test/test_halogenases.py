@@ -288,10 +288,10 @@ class TestPhenolic(PhenolicBase):
                           return_value={"cycline_orsellinic_FDH": phenolic.OTHER_PHENOLIC_SIGNATURE_RESIDUES}):
             categorize_on_substrate_level(DummyCDS(), self.orsellinic_empty_enzyme,
                                           [self.cycline_orsellinic_hmm_result])
-            assert self.orsellinic_empty_enzyme.potential_matches[0].profile == "cycline_orsellinic_FDH"
-            assert self.orsellinic_empty_enzyme.potential_matches[0].confidence == 1
-            assert self.orsellinic_empty_enzyme.potential_matches[0].substrates == "cycline_orsellinic-like"
-            assert self.orsellinic_empty_enzyme.potential_matches[0].target_positions == [6, 8]
+        assert self.orsellinic_empty_enzyme.potential_matches[0].profile == "cycline_orsellinic_FDH"
+        assert self.orsellinic_empty_enzyme.potential_matches[0].confidence == 1
+        assert self.orsellinic_empty_enzyme.potential_matches[0].substrates == "cycline_orsellinic-like"
+        assert self.orsellinic_empty_enzyme.potential_matches[0].target_positions == [6, 8]
 
         with patch.object(substrate_analysis, "search_residues",
                           return_value=""):
@@ -527,51 +527,56 @@ class TestIndolic(IndolicBase):
         assert false_test.target_positions is None
         assert not false_test.potential_matches
 
-    def test_check_for_fdh(self):
+    def test_strong_trp_5(self):
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
                           return_value={"trp_5_FDH": indolic.TRP_5_SIGNATURE_RESIDUES}):
             categorize_on_substrate_level(DummyCDS(), self.trp_empty_enzyme, [self.trp_5_hmm_result])
-            assert self.trp_empty_enzyme.potential_matches[0].profile == "trp_5_FDH"
-            assert self.trp_empty_enzyme.potential_matches[0].confidence == 1
-            assert self.trp_empty_enzyme.potential_matches[0].substrates == "tryptophan"
-            assert self.trp_empty_enzyme.potential_matches[0].number_of_decorations == "mono"
-            assert self.trp_empty_enzyme.potential_matches[0].target_positions == 5
+        assert self.trp_empty_enzyme.potential_matches[0].profile == "trp_5_FDH"
+        assert self.trp_empty_enzyme.potential_matches[0].confidence == 1
+        assert self.trp_empty_enzyme.potential_matches[0].substrates == "tryptophan"
+        assert self.trp_empty_enzyme.potential_matches[0].number_of_decorations == "mono"
+        assert self.trp_empty_enzyme.potential_matches[0].target_positions == 5
 
+    def test_weak_trp_5(self):
         with patch.object(indolic, "get_consensus_signature",
                           return_value={"trp_5_FDH": indolic.TRP_5_SIGNATURE_RESIDUES}):
             low_quality_hit = HalogenaseHmmResult("trp_5_FDH", 380, "trp_5_FDH",
                                                   "foo", "trp_5_FDH")
             categorize_on_substrate_level(DummyCDS(), self.trp_empty_enzyme, [low_quality_hit])
-            assert self.trp_empty_enzyme.potential_matches[1].profile == "trp_5_FDH"
-            assert self.trp_empty_enzyme.potential_matches[1].confidence == 0.5
-            assert self.trp_empty_enzyme.potential_matches[1].substrates == "tryptophan"
-            assert self.trp_empty_enzyme.potential_matches[1].number_of_decorations == "mono"
-            assert self.trp_empty_enzyme.potential_matches[1].target_positions == 5
+        assert self.trp_empty_enzyme.potential_matches[0].profile == "trp_5_FDH"
+        assert self.trp_empty_enzyme.potential_matches[0].confidence == 0.5
+        assert self.trp_empty_enzyme.potential_matches[0].substrates == "tryptophan"
+        assert self.trp_empty_enzyme.potential_matches[0].number_of_decorations == "mono"
+        assert self.trp_empty_enzyme.potential_matches[0].target_positions == 5
 
+    def test_trp_6(self):
         with patch.object(indolic, "get_consensus_signature",
                           return_value={"trp_6_7_FDH": indolic.TRP_6_SIGNATURE_RESIDUES}):
             categorize_on_substrate_level(DummyCDS(), self.trp_empty_enzyme,
                                           [self.trp_6_7_hmm_result])
-            assert self.trp_empty_enzyme.potential_matches[2].profile == "trp_6_7_FDH"
-            assert self.trp_empty_enzyme.potential_matches[2].confidence == 1
-            assert self.trp_empty_enzyme.potential_matches[2].target_positions == 6
-            assert self.trp_empty_enzyme.potential_matches[2].substrates == "tryptophan"
-            assert self.trp_empty_enzyme.potential_matches[2].number_of_decorations == "mono"
+        assert self.trp_empty_enzyme.potential_matches[0].profile == "trp_6_7_FDH"
+        assert self.trp_empty_enzyme.potential_matches[0].confidence == 1
+        assert self.trp_empty_enzyme.potential_matches[0].target_positions == 6
+        assert self.trp_empty_enzyme.potential_matches[0].substrates == "tryptophan"
+        assert self.trp_empty_enzyme.potential_matches[0].number_of_decorations == "mono"
 
+    def test_trp_7(self):
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
                           return_value={"trp_6_7_FDH": "VISIL"}):
             categorize_on_substrate_level(DummyCDS(), self.trp_empty_enzyme, [self.trp_6_7_hmm_result])
-            assert self.trp_empty_enzyme.potential_matches[3].profile == "trp_6_7_FDH"
-            assert self.trp_empty_enzyme.potential_matches[3].confidence == 1
-            assert self.trp_empty_enzyme.potential_matches[3].target_positions == 7
-            assert self.trp_empty_enzyme.potential_matches[3].substrates == "tryptophan"
-            assert self.trp_empty_enzyme.potential_matches[3].number_of_decorations == "mono"
+        assert self.trp_empty_enzyme.potential_matches[0].profile == "trp_6_7_FDH"
+        assert self.trp_empty_enzyme.potential_matches[0].confidence == 1
+        assert self.trp_empty_enzyme.potential_matches[0].target_positions == 7
+        assert self.trp_empty_enzyme.potential_matches[0].substrates == "tryptophan"
+        assert self.trp_empty_enzyme.potential_matches[0].number_of_decorations == "mono"
 
+    def test_no_match(self):
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
                           return_value={"trp_6_7_FDH": None}):
             assert categorize_on_substrate_level(DummyCDS(), self.trp_empty_enzyme,
                                                  self.trp_6_7_hmm_result) is None
 
+    def test_invalid_profile_name(self):
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
                           return_value=""):
             low_quality_hit = HalogenaseHmmResult("wrong_name", 400, "wrong_name",
