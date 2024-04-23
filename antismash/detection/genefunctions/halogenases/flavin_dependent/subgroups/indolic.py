@@ -34,7 +34,7 @@ TRP_5_SIGNATURE_RESIDUES = "VSILIREPGLPRGVPRAVLPGEA"
 TRP_6_SIGNATURE_RESIDUES = "TEGCAGFDAYHDRFGNADYGLSIIAKIL"
 
 def search_for_match(retrieved_residues: str, halogenase: FlavinDependentHalogenase,
-                     hit: HalogenaseHmmResult, position: Union[int, List[int]],
+                     hit: HalogenaseHmmResult, position: int,
                      cutoffs: List[float], *, check_residues: bool = True,
                      expected_residues: Union[str, dict[str,str]] = "",
                      confidence: float = 1) -> bool:
@@ -65,9 +65,9 @@ def search_for_match(retrieved_residues: str, halogenase: FlavinDependentHalogen
         if retrieved_residues == expected_residues or not check_residues:
             halogenase.add_potential_matche(Match(hit.query_id,"flavin", "FDH",
                                                    confidence * modifier, retrieved_residues,
-                                                   target_positions=position,
+                                                   target_positions=[position],
                                                    number_of_decorations="mono",
-                                                   substrates="tryptophan"))
+                                                   substrates=["tryptophan"]))
             return True
     return False
 
