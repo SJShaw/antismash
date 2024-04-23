@@ -24,7 +24,7 @@ from antismash.detection.genefunctions.halogenases.halogenases import (
     HalogenaseHmmResult,
 )
 
-
+from antismash.common.signature import HmmSignature
 from antismash.common.subprocessing import hmmscan
 from antismash.detection.genefunctions.halogenases.flavin_dependent import substrates
 from antismash.detection.genefunctions.halogenases.flavin_dependent.subgroups import (
@@ -43,7 +43,7 @@ FDH_SUBGROUPS = {
 }
 
 
-def _get_substrate_specific_profiles() -> list:
+def _get_substrate_specific_profiles() -> list[HmmSignature]:
     """ Collects the substrate-specific pHMM profiles from the substrate-specific submodules"""
     profiles = []
     submodules = list(set(FDH_SUBGROUPS.values()))
@@ -147,7 +147,7 @@ def search_conserved_motif(cds: CDSFeature, motif_positions: list[int],
     return categorized
 
 
-def run_halogenase_phmms(cluster_fasta: str, profiles: list
+def run_halogenase_phmms(cluster_fasta: str, profiles: list[HmmSignature],
                          ) -> dict[str, list[HalogenaseHmmResult]]:
     """ Check if protein sequences hit any pHMM
 
