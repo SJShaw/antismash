@@ -155,30 +155,30 @@ class PhenolicBase(unittest.TestCase):
         self.test_cycline_orsellinic = create_flavin_match("cycline_orsellinic_FDH", confidence=1., substrates="orsellinic")
 
         self.tyrosine_hmm_result = HalogenaseHmmResult(
-            hit_id='tyrosine-like_hpg_FDH',
+            hit_id="tyrosine-like_hpg_FDH",
             bitscore=1000,
-            query_id='tyrosine-like_hpg_FDH',
+            query_id="tyrosine-like_hpg_FDH",
             enzyme_type="Flavin-dependent",
             profile=phenolic.SPECIFIC_PROFILES[0].path,
         )
         self.less_confident_tyrosine_hmm_result = HalogenaseHmmResult(
-            hit_id='tyrosine-like_hpg_FDH',
+            hit_id="tyrosine-like_hpg_FDH",
             bitscore=310,
-            query_id='tyrosine-like_hpg_FDH',
+            query_id="tyrosine-like_hpg_FDH",
             enzyme_type="Flavin-dependent",
             profile=phenolic.SPECIFIC_PROFILES[0].path
         )
         self.hpg_hmm_result = HalogenaseHmmResult(
-            hit_id='tyrosine-like_hpg_FDH',
+            hit_id="tyrosine-like_hpg_FDH",
             bitscore=600,
-            query_id='tyrosine-like_hpg_FDH',
+            query_id="tyrosine-like_hpg_FDH",
             enzyme_type="Flavin-dependent",
             profile=phenolic.SPECIFIC_PROFILES[0].path,
         )
         self.cycline_orsellinic_hmm_result = HalogenaseHmmResult(
-            hit_id='cycline_orsellinic_FDH',
+            hit_id="cycline_orsellinic_FDH",
             bitscore=600,
-            query_id='cycline_orsellinic_FDH',
+            query_id="cycline_orsellinic_FDH",
             enzyme_type="Flavin-dependent",
             profile=phenolic.SPECIFIC_PROFILES[1].path,
         )
@@ -205,17 +205,17 @@ class PyrrolicBase(unittest.TestCase):
         self.test_pyrrole_match = Match("pyrrole_FDH", "tetra", "unknown cofactor", 1, "", "pyrrole")
 
         self.pyrrole_hmm_result = HalogenaseHmmResult(
-            hit_id='pyrrole_FDH',
+            hit_id="pyrrole_FDH",
             bitscore=1000,
-            query_id='pyrrole_FDH',
+            query_id="pyrrole_FDH",
             enzyme_type="FDH",
             profile=pyrrolic.SPECIFIC_PROFILES[0].path
         )
 
         self.negative_pyrrole_hmm_result = HalogenaseHmmResult(
-            hit_id='pyrrole_FDH',
+            hit_id="pyrrole_FDH",
             bitscore=1,
-            query_id='pyrrole_FDH',
+            query_id="pyrrole_FDH",
             enzyme_type="FDH",
             profile=pyrrolic.SPECIFIC_PROFILES[0].path
         )
@@ -230,17 +230,17 @@ class IndolicBase(unittest.TestCase):
         self.test_trp_6_7_match = create_flavin_match("trp_6_7_FDH", confidence=1, consensus_residues="", substrates="tryptophan", target_positions=6, number_of_decorations="mono")
 
         self.trp_5_hmm_result = HalogenaseHmmResult(
-            hit_id='trp_5_FDH',
+            hit_id="trp_5_FDH",
             bitscore=1000,
-            query_id='trp_5_FDH',
-            enzyme_type='Flavin-dependent',
+            query_id="trp_5_FDH",
+            enzyme_type="Flavin-dependent",
             profile=indolic.SPECIFIC_PROFILES[0].path,
         )
         self.trp_6_7_hmm_result = HalogenaseHmmResult(
-            hit_id='trp_6_7_FDH',
+            hit_id="trp_6_7_FDH",
             bitscore=1000,
-            query_id='trp_6_7_FDH',
-            enzyme_type='Flavin-dependent',
+            query_id="trp_6_7_FDH",
+            enzyme_type="Flavin-dependent",
             profile=indolic.SPECIFIC_PROFILES[1].path,
         )
 
@@ -587,7 +587,7 @@ class TestIndolic(IndolicBase):
             categorize_on_substrate_level(DummyCDS(), FDH("mibH"), [invalid_hit])
 
     @patch.object(indolic, "get_consensus_signature",
-                  return_value={'trp_5_FDH': 'VSILIREPGLPRGVPRAVLPGEA'})
+                  return_value={"trp_5_FDH": "VSILIREPGLPRGVPRAVLPGEA"})
     def test_categorize_on_substrate_level(self, _patched_get_consensus_signature):
         negative_checked_halogenases = categorize_on_substrate_level(DummyCDS(), self.trp_empty_enzyme, [])
         assert negative_checked_halogenases is None
@@ -698,7 +698,7 @@ class TestGeneralEnzymes(IndolicBase):
             [HalogenaseHmmResult("CtoA", 200, "all_conventional_FDH", "FDH",
                                  substrates.GENERAL_FDH_PROFILES[0].path)],
         )
-        assert result.consensus_residues == {'W.W.I.': 'WIWVIR'}
+        assert result.consensus_residues == {"W.W.I.": "WIWVIR"}
         assert result.substrates is None
         assert not result.potential_matches
 
@@ -709,7 +709,7 @@ class TestGeneralEnzymes(IndolicBase):
                                                              FakeHSPHit("all_general_FDH", "CtoA", bitscore=200),
                                                              self.general_empty_enzyme, [],
                                                              halogenases_analysis.specific_analysis)
-        assert categorized_halogenase[0].consensus_residues == {'W.W.I.': 'WIWVIR'}
+        assert categorized_halogenase[0].consensus_residues == {"W.W.I.": "WIWVIR"}
 
     @patch.object(substrate_analysis, "search_residues", return_value="VALAMI")
     def test_negative_get_conserved_motifs(self, _patched_search_residues):
