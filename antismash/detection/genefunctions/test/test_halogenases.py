@@ -339,7 +339,7 @@ class TestPhenolic(PhenolicBase):
 
     def test_retrieve_fdh_signature_residues(self):
         with patch.object(subprocessing.hmmpfam, "run_hmmpfam2") as run_hmmpfam2:
-            run_hmmpfam2.return_value = [FakeHit("start", "end", 1000, "foo")]
+            run_hmmpfam2.return_value = [FakeHit(1, 2, 1000, "foo")]
             # checking if hit_id != query_id it breaks
             for result in run_hmmpfam2.return_value:
                 result.hsps = [FakeHSPHit("BhaA", hit_id="tyrosine-like_hpg_FDH")]
@@ -363,7 +363,7 @@ class TestPhenolic(PhenolicBase):
 class TestPyrrolic(PyrrolicBase):
     def test_get_consensus_signature(self):
         with patch.object(subprocessing.hmmpfam, "run_hmmpfam2") as run_hmmpfam2:
-            run_hmmpfam2.return_value = [FakeHit("start", "end", 1000, "foo")]
+            run_hmmpfam2.return_value = [FakeHit(1, 2, 1000, "foo")]
             # checking if hit_id != query_id it breaks
             for result in run_hmmpfam2.return_value:
                 result.hsps = [FakeHSPHit("bmp2", hit_id="pyrrole_FDH")]
@@ -460,7 +460,7 @@ class TestIndolic(IndolicBase):
         assert rebuilt.to_json() == original
 
     @patch.object(subprocessing, "run_hmmsearch",
-                  return_value=[FakeHit("start", "end", 1000, "foo")])
+                  return_value=[FakeHit(1, 2, 1000, "foo")])
     def test_run_halogenase_phmms(self, run_hmmsearch):
         for value in run_hmmsearch.return_value:
             value.hsps = [FakeHSPHit("foo", "foo", bitscore=250)]
@@ -484,7 +484,7 @@ class TestIndolic(IndolicBase):
                                                  target_positions, self.trp_6_7_hmm_result)
             assert signature_residues is None
 
-            run_hmmpfam2.return_value = [FakeHit("start", "end", 1000, "foo")]
+            run_hmmpfam2.return_value = [FakeHit(1, 2, 1000, "foo")]
             # checking if hit_id != query_id it breaks
             for result in run_hmmpfam2.return_value:
                 result.hsps = [FakeHSPHit("foo", hit_id="foo")]
@@ -607,7 +607,7 @@ class TestSpecificAnalysis(IndolicBase):
     # one best match
     def test_one_best_match(self):
         positive_test = self.specific_analysis_test("ktzR",
-                                                    FakeHit("start", "end", 900, "ktzR"),
+                                                    FakeHit(1, 2, 900, "ktzR"),
                                                     FakeHSPHit("trp_6_7_FDH", "ktzR", bitscore=1500),
                                                     self.trp_enzyme_with_matches,
                                                     [self.test_trp_6_7_match],
@@ -621,7 +621,7 @@ class TestSpecificAnalysis(IndolicBase):
         assert positive_test and positive_test[0].target_positions == 6
 
     def test_more_best_match(self):
-        positive_test = self.specific_analysis_test("mibH", FakeHit("start", "end", 500, "mibH"),
+        positive_test = self.specific_analysis_test("mibH", FakeHit(1, 2, 500, "mibH"),
                                                     FakeHSPHit("trp_5_FDH", "mibH", bitscore=800),
                                                     self.trp_5_enzyme_with_matches,
                                                     [self.test_trp_5_match, self.test_trp_6_7_match],
@@ -663,7 +663,7 @@ class TestGeneralEnzymes(IndolicBase):
     @patch.object(substrate_analysis, "search_residues",
                   return_value="VALAMIVALAMI")
     def test_unconventional_fdh_specific_analysis(self, _patched_search_residues):
-        positive_test = self.specific_analysis_test("VatD", FakeHit("start", "end", 200, "unconventional_FDH"),
+        positive_test = self.specific_analysis_test("VatD", FakeHit(1, 2, 200, "unconventional_FDH"),
                                                     FakeHSPHit("unconventional_FDH", "VatD", bitscore=200),
                                                     self.unconventional_empty_enzyme, [],
                                                     fdh_specific_analysis)
@@ -676,7 +676,7 @@ class TestGeneralEnzymes(IndolicBase):
                   return_value="WIWVIRYGMIGDAASVIDAYYSQGVSLALVT")
     def test_conventional_fdh_specific_analysis(self, _patched_search_residues):
         positive_test = self.specific_analysis_test("CtoA",
-                                                    FakeHit("start", "end", 200, "all_general_FDH"),
+                                                    FakeHit(1, 2, 200, "all_general_FDH"),
                                                     FakeHSPHit("all_general_FDH", "CtoA", bitscore=200),
                                                     self.general_empty_enzyme, [],
                                                     fdh_specific_analysis)
@@ -700,7 +700,7 @@ class TestGeneralEnzymes(IndolicBase):
     @patch.object(substrate_analysis, "search_residues",
                   return_value="WIWVIRYGMIGDAASVIDAYYSQGVSLALVT")
     def test_specific_analysis(self, _patched_search_residues):
-        categorized_halogenase = self.specific_analysis_test("CtoA", FakeHit("start", "end", 200, "all_general_FDH"),
+        categorized_halogenase = self.specific_analysis_test("CtoA", FakeHit(1, 2, 200, "all_general_FDH"),
                                                              FakeHSPHit("all_general_FDH", "CtoA", bitscore=200),
                                                              self.general_empty_enzyme, [],
                                                              halogenases_analysis.specific_analysis)
@@ -708,7 +708,7 @@ class TestGeneralEnzymes(IndolicBase):
 
     @patch.object(substrate_analysis, "search_residues", return_value="VALAMI")
     def test_negative_get_conserved_motifs(self, _patched_search_residues):
-        categorized_halogenase = self.specific_analysis_test("VatD", FakeHit("start", "end", 200, "unconventional_FDH"),
+        categorized_halogenase = self.specific_analysis_test("VatD", FakeHit(1, 2, 200, "unconventional_FDH"),
                                                              FakeHSPHit("unconventional_FDH", "VatD", bitscore=200),
                                                              self.unconventional_empty_enzyme, [],
                                                              halogenases_analysis.specific_analysis)
@@ -718,7 +718,7 @@ class TestGeneralEnzymes(IndolicBase):
     @patch.object(substrate_analysis, "search_residues", return_value="")
     def test_negative_enzyme_hits_fasta(self, _patched_search_residues):
         no_potential_matches = self.specific_analysis_test("VatD",
-                                                           FakeHit("start", "end", 200, "unconventional_FDH"),
+                                                           FakeHit(1, 2, 200, "unconventional_FDH"),
                                                            FakeHSPHit("unconventional_FDH", "VatD", bitscore=200),
                                                            self.unconventional_empty_enzyme, [], fdh_specific_analysis)
         assert not no_potential_matches[0].potential_matches
