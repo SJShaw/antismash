@@ -170,18 +170,21 @@ def run_halogenase_phmms(cluster_fasta: str, profiles: list
 
 
 def categorize_on_substrate_level(cds: CDSFeature, halogenase_match: FlavinDependentHalogenase,
-                                  hmm_results: list[HalogenaseHmmResult]
+                                  hmm_results: list[HalogenaseHmmResult],
                                   ) -> Optional[FlavinDependentHalogenase]:
     """ Check if protein could be categorized as a Flavin-dependent enzyme
 
+        Modifies the HalogenasesResults by adding the label of the enzyme family,
+        and possibly the signature and position of halogenation determined.
+        If it doesn't meet the requirements, it doesn't make changes on the original instance.
+
         Arguments:
-            cds: gene/CDS and its properties
-            hit: details of the hit (e.g. bitscore, name of the profile, etc.)
+            cds: the CDS feature to categorize
+            halogenase_match: the halogenase instance for the given CDS
+            hmm_results: a list of HMM hits for the CDS
 
         Returns:
-            Modifies the HalogenasesResults by adding the label of the enzyme family,
-            and possibly the signature and position of halogenation determined.
-            If it doesn't meet the requirements, it doesn't make changes on the original instance.
+            the given halogenase, if it was modified, otherwise None
     """
     if not hmm_results:
         return None
