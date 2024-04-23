@@ -46,8 +46,8 @@ class Match:
     family: str
     confidence: float
     consensus_residues: Union[str, dict[str, str]]
-    substrates: Union[str, list[str], None] = None
-    target_positions: Optional[Union[int, list[int]]] = None
+    substrates: Optional[list[str]] = None
+    target_positions: Optional[list[int]] = None
     number_of_decorations: Optional[str] = None
 
     def to_json(self) -> dict[str, Any]:
@@ -63,8 +63,8 @@ class FlavinDependentHalogenase:
     cds_name: str
     confidence: float = 0
     consensus_residues: Optional[Union[str, dict[str, str]]] = None
-    substrates: Union[str, list[str], None] = None
-    target_positions: Optional[Union[int, list[int]]] = None
+    substrates: Optional[list[str]] = None
+    target_positions: Optional[list[int]] = None
     number_of_decorations: Optional[str] = None
     potential_matches: list[Match] = field(default_factory=list)
 

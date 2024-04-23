@@ -54,7 +54,7 @@ def search_for_match(retrieved_residues: dict[str, str], halogenase: FlavinDepen
             halogenase.add_potential_matche(Match(hit.query_id, "flavin", "FDH",
                                                     confidence, sig_res,
                                                     number_of_decorations=subs,
-                                                    substrates = "pyrrole"))
+                                                    substrates=["pyrrole"]))
             return True
     return False
 

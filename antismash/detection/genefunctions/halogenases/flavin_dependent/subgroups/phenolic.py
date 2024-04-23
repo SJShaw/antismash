@@ -40,7 +40,7 @@ OTHER_PHENOLIC_SIGNATURE_RESIDUES = "LGPRGGRDAGVDAGGYGFDPSG"
 
 def search_for_match(retrieved_residues: Union[dict[str, str], str],
                      halogenase: FlavinDependentHalogenase,
-                     hit: HalogenaseHmmResult, position: Union[int, List[int]],
+                     hit: HalogenaseHmmResult, positions: list[int],
                      cutoffs: Union[List[int], int], *,
                      expected_residues: Union[str, dict[str, str]],
                      confidence: float = 1.) -> bool:
@@ -51,7 +51,7 @@ def search_for_match(retrieved_residues: Union[dict[str, str], str],
                                 in the place of the signature residues
             halogenase: initiated flavin-dependent halogenase
             hit: details of the hit (e.g. bitscore, name of the profile, etc.)
-            position: position of decoration
+            positions: the decoration positions
             cutoffs: threshold(s) for the pHMM
             expected_residues: expected, substrate-specific signature residues
             confidence: reliability of the categorization
@@ -81,17 +81,17 @@ def search_for_match(retrieved_residues: Union[dict[str, str], str],
                 halogenase.add_potential_matche(Match(hit.query_id, "flavin", "FDH",
                                                     confidence * modifier,
                                                     retrieved_residues["Hpg"],
-                                                    target_positions=position, substrates="Hpg"))
+                                                    target_positions=positions, substrates=["Hpg"]))
                 halogenase.add_potential_matche(Match(hit.query_id, "flavin", "FDH",
                                                        (confidence * modifier)-0.2,
                                                        retrieved_residues["Tyr"],
-                                                       target_positions=position, substrates="Tyr"))
+                                                       target_positions=positions, substrates=["Tyr"]))
                 return True
 
             if retrieved_residues["Tyr"] == expected_residues["Tyr"]:
                 halogenase.add_potential_matche(Match(hit.query_id, "flavin", "FDH",
                                                     confidence * modifier, retrieved_residues,
-                                                    target_positions=position, substrates="Tyr"))
+                                                    target_positions=positions, substrates=["Tyr"]))
                 return True
         return False
     if isinstance(cutoffs, int):
@@ -99,8 +99,8 @@ def search_for_match(retrieved_residues: Union[dict[str, str], str],
             return False
         halogenase.add_potential_matche(Match(hit.query_id, "flavin", "FDH",
                                                     confidence * modifier, retrieved_residues,
-                                                    target_positions=position,
-                                                    substrates="cycline_orsellinic-like"))
+                                                    target_positions=positions,
+                                                    substrates=["cycline_orsellinic-like"]))
         return True
     return False
 
