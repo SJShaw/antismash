@@ -5,7 +5,7 @@
 # pylint: disable=use-implicit-booleaness-not-comparison,protected-access,missing-docstring
 
 from pathlib import Path
-from typing import Union, List
+from typing import Union
 
 from antismash.common.secmet import CDSFeature
 from antismash.common.path import get_full_path
@@ -35,7 +35,7 @@ TRP_6_SIGNATURE_RESIDUES = "TEGCAGFDAYHDRFGNADYGLSIIAKIL"
 
 def search_for_match(retrieved_residues: str, halogenase: FlavinDependentHalogenase,
                      hit: HalogenaseHmmResult, position: int,
-                     cutoffs: List[float], *, check_residues: bool = True,
+                     cutoffs: list[float], *, check_residues: bool = True,
                      expected_residues: Union[str, dict[str,str]] = "",
                      confidence: float = 1) -> bool:
     """ Looks whether there are hmm hits that meet the requirement for the categorization
