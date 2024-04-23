@@ -218,7 +218,6 @@ class PyrrolicBase(unittest.TestCase):
 
 class IndolicBase(unittest.TestCase):
     def setUp(self):
-        self.record = DummyRecord()
         self.test_trp_5_match = Match("trp_5_FDH", "flavin", "FDH", 1, None,
                                       "tryptophan", 5, "mono")
         self.test_trp_6_7_match = Match("trp_6_7_FDH", "flavin", "FDH", 1, "",
@@ -268,8 +267,7 @@ class IndolicBase(unittest.TestCase):
                                       return_value=get_best_match_return_value):
                         cds = DummyCDS(locus_tag=name,
                                        translation=test_protein_translations[name])
-                        record = self.record
-                        record.add_cds_feature(cds)
+                        record = DummyRecord(features=[cds])
                         with patch.object(secmet.Record, "get_cds_features_within_regions",
                                           return_value=[cds]):
                             return analysis_function(record)
@@ -356,9 +354,11 @@ class TestPhenolic(PhenolicBase):
                     hit.aln = [hit_profile, hit_query]
             cds = DummyCDS(locus_tag="BhaA", translation=test_protein_translations["BhaA"])
             assert " " not in cds.translation
-            residues = substrate_analysis.retrieve_fdh_signature_residues(cds.translation, self.hpg_hmm_result,
-                                                                          [phenolic.TYROSINE_LIKE_SIGNATURE, phenolic.HPG_SIGNATURE],
-                                                                          enzyme_substrates=["Tyr", "Hpg"])
+            residues = substrate_analysis.retrieve_fdh_signature_residues(
+                cds.translation, self.hpg_hmm_result,
+                [phenolic.TYROSINE_LIKE_SIGNATURE, phenolic.HPG_SIGNATURE],
+                enzyme_substrates=["Tyr", "Hpg"],
+            )
             assert isinstance(residues, dict)
             assert residues["Tyr"] is not None and residues["Hpg"] is not None
 
@@ -688,10 +688,12 @@ class TestGeneralEnzymes(IndolicBase):
     @patch.object(substrate_analysis, "search_residues",
                   return_value="WIWVIRYGMIGDAASVIDAYYSQGVSLALVT")
     def test_random(self, _patched_search_residues):
-        result = substrate_analysis.categorize_on_consensus_level(DummyCDS(locus_tag="CtoA",
-                                                                           translation=test_protein_translations["CtoA"]), {},
-                                                                  [HalogenaseHmmResult("CtoA", 200, "all_conventional_FDH", "FDH",
-                                                                                       substrates.GENERAL_FDH_PROFILES[0].path)])
+        result = substrate_analysis.categorize_on_consensus_level(
+            DummyCDS(locus_tag="CtoA", translation=test_protein_translations["CtoA"]),
+            {},
+            [HalogenaseHmmResult("CtoA", 200, "all_conventional_FDH", "FDH",
+                                 substrates.GENERAL_FDH_PROFILES[0].path)],
+        )
         assert result.consensus_residues == {'W.W.I.': 'WIWVIR'}
         assert result.substrates is None
         assert not result.potential_matches
