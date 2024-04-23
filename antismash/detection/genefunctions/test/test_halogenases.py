@@ -250,7 +250,7 @@ class IndolicBase(unittest.TestCase):
 
     def specific_analysis_test(self, name, fake_hit,
                                fake_hsps, categorize_return_value,
-                               get_best_match_return_value,
+                               get_best_matches_return_value,
                                analysis_function):
         with patch.object(hmmscan, "run_hmmscan",
                           return_value=[fake_hsps]) as _patched_hmmscan:
@@ -263,8 +263,8 @@ class IndolicBase(unittest.TestCase):
                     value.hsps = [fake_hsps]
                 with patch.object(substrate_analysis, "categorize_on_substrate_level",
                                   return_value=categorize_return_value):
-                    with patch.object(FDH, "get_best_match",
-                                      return_value=get_best_match_return_value):
+                    with patch.object(FDH, "get_best_matches",
+                                      return_value=get_best_matches_return_value):
                         cds = DummyCDS(locus_tag=name,
                                        translation=test_protein_translations[name])
                         record = DummyRecord(features=[cds])
@@ -435,21 +435,21 @@ class TestPyrrolic(PyrrolicBase):
 
 
 class TestIndolic(IndolicBase):
-    def test_get_best_match(self):
-        assert not self.trp_empty_enzyme.get_best_match()
+    def test_get_best_matches(self):
+        assert not self.trp_empty_enzyme.get_best_matches()
 
-        positive_test_best_match = self.trp_enzyme_with_matches.get_best_match()
+        positive_test_best_match = self.trp_enzyme_with_matches.get_best_matches()
 
         assert len(positive_test_best_match) == 1 and isinstance(positive_test_best_match[0], Match)
 
         self.trp_enzyme_with_matches.add_potential_matche(self.test_trp_6_7_match)
         assert len(self.trp_enzyme_with_matches.potential_matches) == 2
 
-        multiple_matches = self.trp_enzyme_with_matches.get_best_match()
+        multiple_matches = self.trp_enzyme_with_matches.get_best_matches()
         assert len(multiple_matches) == 2 and isinstance(positive_test_best_match[0], Match)
 
         one_potential_match = FDH("test_enzyme", potential_matches=[self.test_trp_5_match])
-        multiple_matches = one_potential_match.get_best_match()
+        multiple_matches = one_potential_match.get_best_matches()
         assert len(multiple_matches) == 1 and isinstance(positive_test_best_match[0], Match)
 
     # halogenases analysis

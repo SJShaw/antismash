@@ -75,7 +75,7 @@ class FlavinDependentHalogenase:
         """ Adds the features of an enzyme group to list"""
         self.potential_matches.append(match)
 
-    def get_best_match(self) -> list[Match]:
+    def get_best_matches(self) -> list[Match]:
         """ If an enzyme meets the requirements for several groups,
             it compares the confidences of the categorizations and
             returns the one with the highest confidence or list of matches.
@@ -98,7 +98,7 @@ class FlavinDependentHalogenase:
             get that one match and define position, confidence and signature
             in the enzyme instance based on that.
             If there is no one best match, it doesn't change anything."""
-        best_matches = self.get_best_match()
+        best_matches = self.get_best_matches()
         assert isinstance(best_matches, list), best_matches
         if not best_matches:
             return
