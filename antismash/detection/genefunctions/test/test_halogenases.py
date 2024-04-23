@@ -150,8 +150,8 @@ class PhenolicBase(unittest.TestCase):
             bitscore=1000,
             query_id='tyrosine-like_hpg_FDH',
             enzyme_type="Flavin-dependent",
-            profile=phenolic.SPECIFIC_PROFILES[0].path
-            )
+            profile=phenolic.SPECIFIC_PROFILES[0].path,
+        )
         self.less_confident_tyrosine_hmm_result = HalogenaseHmmResult(
             hit_id='tyrosine-like_hpg_FDH',
             bitscore=310,
@@ -164,15 +164,15 @@ class PhenolicBase(unittest.TestCase):
             bitscore=600,
             query_id='tyrosine-like_hpg_FDH',
             enzyme_type="Flavin-dependent",
-            profile=phenolic.SPECIFIC_PROFILES[0].path
-            )
+            profile=phenolic.SPECIFIC_PROFILES[0].path,
+        )
         self.cycline_orsellinic_hmm_result = HalogenaseHmmResult(
             hit_id='cycline_orsellinic_FDH',
             bitscore=600,
             query_id='cycline_orsellinic_FDH',
             enzyme_type="Flavin-dependent",
-            profile=phenolic.SPECIFIC_PROFILES[1].path
-            )
+            profile=phenolic.SPECIFIC_PROFILES[1].path,
+        )
 
         # tyrosine
         self.tyr_empty_enzyme = FDH("BhaA")
@@ -193,8 +193,7 @@ class PhenolicBase(unittest.TestCase):
 class PyrrolicBase(unittest.TestCase):
     def setUp(self):
         self.pyrrole_empty_enzyme = FDH("bmp2")
-        self.test_pyrrole_match = Match("pyrrole_FDH",
-                                        "tetra", 1, None, "pyrrole")
+        self.test_pyrrole_match = Match("pyrrole_FDH", "tetra", 1, None, "pyrrole")
 
         self.pyrrole_hmm_result = HalogenaseHmmResult(
             hit_id='pyrrole_FDH',
