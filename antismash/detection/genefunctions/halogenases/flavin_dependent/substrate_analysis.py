@@ -196,9 +196,7 @@ def categorize_on_substrate_level(cds: CDSFeature, halogenase_match: FlavinDepen
         specific_signature_residues = signature_residues[hit.query_id]
         if not specific_signature_residues:
             return None
-        FDH_SUBGROUPS[hit.query_id].update_match(hit.query_id,
-                                                 specific_signature_residues,
-                                                 halogenase_match, hit)
+        FDH_SUBGROUPS[hit.query_id].update_match(specific_signature_residues, halogenase_match, hit)
     if not halogenase_match.potential_matches:
         return None
 
@@ -268,5 +266,6 @@ def fdh_specific_analysis(record: Record) -> list[FlavinDependentHalogenase]:
                                                                general_hmm_hits[protein]))
     for enzyme in potential_enzymes:
         enzyme.finalize_enzyme()
+        import logging; logging.critical("%r", enzyme)
 
     return potential_enzymes

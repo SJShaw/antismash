@@ -58,14 +58,13 @@ def search_for_match(retrieved_residues: dict[str, str], halogenase: FlavinDepen
             return True
     return False
 
-def update_match(name: str, retrieved_residues: dict[str, str],
+def update_match(retrieved_residues: dict[str, str],
                  halogenase: FlavinDependentHalogenase,
                  hit: HalogenaseHmmResult) -> None:
     """ Looks whether there are hmm hits that meet the requirement for the categorization
         as a pyrrole halogenase doing mono/di- or tetra-halogenation
 
         Arguments:
-            name: name of the substrate-specific pHMM
             retrieved_residues: residues of the protein sequence
                                 in the place of the signature residues
             halogenase: initiated flavin-dependent halogenase
@@ -77,7 +76,7 @@ def update_match(name: str, retrieved_residues: dict[str, str],
             position, confidence, signature and substrate,
             otherwise, it doesn't return anything and doesn't instanciate anything
     """
-    if name == "pyrrole_FDH":
+    if hit.hit_id == "pyrrole_FDH":
         search_for_match(retrieved_residues, halogenase, hit,
                          cutoff=SPECIFIC_PROFILES[0].cutoff,
                          expected_residues=PYRROLE_SIGNATURE_RESIDUES)

@@ -71,13 +71,12 @@ def search_for_match(retrieved_residues: str, halogenase: FlavinDependentHalogen
             return True
     return False
 
-def update_match(name: str, retrieved_residues: str, halogenase: FlavinDependentHalogenase,
+def update_match(retrieved_residues: str, halogenase: FlavinDependentHalogenase,
                  hit: HalogenaseHmmResult) -> None:
     """ Looks whether there are hmm hits that meet the requirement for the categorization
         as Trp-5, Trp-6, or Trp-7 halogenase
 
         Arguments:
-            name: name of the substrate-specific pHMM
             retrieved_residues: residues of the protein sequence
                                 in the place of the signature residues
             halogenase: initiated flavin-dependent halogenase
@@ -89,12 +88,12 @@ def update_match(name: str, retrieved_residues: str, halogenase: FlavinDependent
             confidence, signature and substrate,
             otherwise, it doesn't return anything and doesn't instanciate anything
     """
-    if name == "trp_5_FDH":
+    if hit.hit_id == "trp_5_FDH":
         if search_for_match(retrieved_residues, halogenase, hit, 5,
                             cutoffs=[SPECIFIC_PROFILES[0].cutoff, 850],
                             expected_residues=TRP_5_SIGNATURE_RESIDUES):
             return
-    elif name == "trp_6_7_FDH":
+    elif hit.hit_id == "trp_6_7_FDH":
         if not search_for_match(retrieved_residues, halogenase, hit, 6, cutoffs=[770],
                                expected_residues=TRP_6_SIGNATURE_RESIDUES):
             if search_for_match(retrieved_residues, halogenase,

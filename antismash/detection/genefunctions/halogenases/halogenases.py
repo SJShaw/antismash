@@ -147,3 +147,6 @@ class FlavinDependentHalogenase:
                      consensus_residues, substrates, target_positions,
                      number_of_decorations, potential_matches)
         return enzyme
+
+    def __repr__(self) -> str:
+        return f"FlavinDependentHalogenase({self.cds_name=}, {self.confidence=}, {self.potential_matches=})"
