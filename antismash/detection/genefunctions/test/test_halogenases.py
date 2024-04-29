@@ -292,7 +292,7 @@ class TestPhenolic(PhenolicBase):
     def test_categorize_on_substrate_level(self):
         # Other phenolic (orsellinic-like) substrate halogenases
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
-                          return_value={"cycline_orsellinic_FDH": phenolic.OTHER_PHENOLIC_SIGNATURE_RESIDUES}):
+                          return_value={"cycline_orsellinic_FDH": phenolic.OTHER_PHENOLIC_RESIDUES}):
             categorize_on_substrate_level(DummyCDS(), self.orsellinic_empty_enzyme,
                                           [self.cycline_orsellinic_hmm_result])
         assert self.orsellinic_empty_enzyme.potential_matches[0].profile == "cycline_orsellinic_FDH"
@@ -307,7 +307,7 @@ class TestPhenolic(PhenolicBase):
 
         # Tyr and Hpg halogenases
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
-                          return_value=phenolic.TYR_HPG_SIGNATURE_RESIDUES):
+                          return_value=phenolic.TYR_HPG_RESIDUES):
             categorize_on_substrate_level(DummyCDS(translation=TRANSLATIONS["End30"]), self.hpg_enzyme, [self.hpg_hmm_result])
         assert self.hpg_enzyme.potential_matches[0].profile == "tyrosine-like_hpg_FDH"
         assert self.hpg_enzyme.potential_matches[0].confidence == 1
@@ -329,23 +329,23 @@ class TestPhenolic(PhenolicBase):
                                                  self.tyrosine_hmm_result) is None
 
     def test_negative_search_for_match(self):
-        assert not phenolic.search_for_match(phenolic.TYR_HPG_SIGNATURE_RESIDUES,
+        assert not phenolic.search_for_match(phenolic.TYR_HPG_RESIDUES,
                                              self.tyr_enzyme,
                                              self.less_confident_tyrosine_hmm_result,
                                              [6, 8], [1000],
-                                             expected_residues=phenolic.TYR_HPG_SIGNATURE_RESIDUES)
+                                             expected_residues=phenolic.TYR_HPG_RESIDUES)
 
-        assert not phenolic.search_for_match(phenolic.TYR_HPG_SIGNATURE_RESIDUES,
+        assert not phenolic.search_for_match(phenolic.TYR_HPG_RESIDUES,
                                              self.tyr_enzyme,
                                              self.less_confident_tyrosine_hmm_result,
                                              [6, 8], [1000, 500],
-                                             expected_residues=phenolic.TYR_HPG_SIGNATURE_RESIDUES)
+                                             expected_residues=phenolic.TYR_HPG_RESIDUES)
 
-        assert not phenolic.search_for_match(phenolic.TYR_HPG_SIGNATURE_RESIDUES,
+        assert not phenolic.search_for_match(phenolic.TYR_HPG_RESIDUES,
                                              self.tyr_enzyme,
                                              self.less_confident_tyrosine_hmm_result,
                                              [6, 8], "false_cutoff",
-                                             expected_residues=phenolic.TYR_HPG_SIGNATURE_RESIDUES)
+                                             expected_residues=phenolic.TYR_HPG_RESIDUES)
 
     def test_retrieve_fdh_signature_residues(self):
         with patch.object(subprocessing.hmmpfam, "run_hmmpfam2") as run_hmmpfam2:
@@ -363,7 +363,7 @@ class TestPhenolic(PhenolicBase):
             assert " " not in cds.translation
             residues = substrate_analysis.retrieve_fdh_signature_residues(
                 cds.translation, self.hpg_hmm_result,
-                [phenolic.TYROSINE_LIKE_SIGNATURE, phenolic.HPG_SIGNATURE],
+                [phenolic.TYROSINE_LIKE_POSITIONS, phenolic.HPG_POSITIONS],
                 enzyme_substrates=["Tyr", "Hpg"],
             )
         assert isinstance(residues, dict)

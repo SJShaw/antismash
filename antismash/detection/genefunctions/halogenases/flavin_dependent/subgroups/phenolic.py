@@ -16,31 +16,51 @@ from antismash.common.signature import HmmSignature
 from antismash.detection.genefunctions.halogenases.halogenases import (
     Match,
     HalogenaseHmmResult,
-    FlavinDependentHalogenase)
+    FlavinDependentHalogenase,
+)
 from antismash.detection.genefunctions.halogenases.flavin_dependent import substrate_analysis
 
 
-SPECIFIC_PROFILES = [HmmSignature("tyrosine-like_hpg_FDH",
-                                  "Tyrosine-like or Hpg substrate halogenase",
-                                  300, get_full_path(str(Path(__file__).parents[1]),
-                                                     "data", "tyrosine-like_hpg_FDH.hmm")),
-                     HmmSignature("cycline_orsellinic_FDH",
-                                  "Orsellinic acid-like or other phenolic substrate halogenase",
-                                  500, get_full_path(str(Path(__file__).parents[1]),
-                                                     "data", "cycline_orsellinic_FDH.hmm"))]
+SPECIFIC_PROFILES = [
+    HmmSignature(
+        "tyrosine-like_hpg_FDH",
+        "Tyrosine-like or Hpg substrate halogenase",
+        300,
+        get_full_path(str(Path(__file__).parents[1]), "data", "tyrosine-like_hpg_FDH.hmm"),
+    ),
+    HmmSignature(
+        "cycline_orsellinic_FDH",
+        "Orsellinic acid-like or other phenolic substrate halogenase",
+        500,
+        get_full_path(str(Path(__file__).parents[1]), "data", "cycline_orsellinic_FDH.hmm")
+    ),
+]
 
-TYROSINE_LIKE_SIGNATURE = [58, 74, 89, 92, 99, 107, 149, 150,
-                           152, 209, 215, 217, 219, 245, 267,
-                           268, 282, 284, 289, 290, 293, 295, 305, 331, 357]
-HPG_SIGNATURE = [66, 158, 196, 200, 246, 259]
+TYROSINE_LIKE = {
+    58: "G", 74: "F", 89: "Q", 92: "R", 99: "L", 107: "G", 149: "D", 150: "A", 152: "G",
+    209: "L", 215: "S", 217: "G", 219: "V", 245: "P", 267: "S", 268: "Y", 282: "G",
+    284: "A", 289: "D", 290: "P", 293: "S", 295: "G", 305: "L", 331: "Y", 357: "W",
+}
+TYROSINE_LIKE_POSITIONS = sorted(TYROSINE_LIKE)
 
-OTHER_PHENOLIC_SIGNATURE = [23, 27, 39, 40, 59, 74, 109, 113, 120, 124, 133, 165,
-                            166, 168, 233, 284, 291, 303, 305, 306, 309, 311]
+# Hpg is a subset of Tyrosine-like, with more specific positions required
+HPG = {
+    66: "S", 158: "H", 196: "C", 200: "G", 246: "M", 259: "Q",
+}
+HPG.update(TYROSINE_LIKE)
+HPG_POSITIONS = sorted(HPG)
 
-TYR_HPG_SIGNATURE_RESIDUES = {"Tyr": "GFQRLGDAGLSGVPSYGADPSGLYW",
-                              "Hpg": "SHCGMQ"}
+TYR_HPG_RESIDUES = {
+    "Tyr": "".join(amino for _, amino in sorted(TYROSINE_LIKE.items())),
+    "Hpg": "".join(amino for _, amino in sorted(HPG.items())),
+}
 
-OTHER_PHENOLIC_SIGNATURE_RESIDUES = "LGPRGGRDAGVDAGGYGFDPSG"
+OTHER_PHENOLIC = {
+    23: "L", 27: "G", 39: "P", 40: "R", 59: "G", 74: "G", 109: "R", 113: "D",
+    120: "A", 124: "G", 133: "V", 165: "D", 166: "A", 168: "G", 233: "G", 284: "Y",
+    291: "G", 303: "F", 305: "D", 306: "P", 309: "S", 311: "G",
+}
+OTHER_PHENOLIC_RESIDUES = "".join(amino for _, amino in sorted(OTHER_PHENOLIC.items()))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -74,10 +94,10 @@ TYR = Variant(
     profile_name="tyrosine-like_hpg_FDH",
     profile_cutoff=300,
     filename=get_full_path(str(Path(__file__).parents[1]), "data", "tyrosine-like_hpg_FDH.hmm"),
-    signature_positions=TYROSINE_LIKE_SIGNATURE,
+    signature_positions=TYROSINE_LIKE_POSITIONS,
     modification_positions=[6, 8],
-    expected_residues=TYR_HPG_SIGNATURE_RESIDUES["Tyr"],
-    alternate_cutoffs=[(0., 0.5)]
+    expected_residues=TYR_HPG_RESIDUES["Tyr"],
+    alternate_cutoffs=[(0., 0.5)],
 )
 
 HPG = Variant(
@@ -85,9 +105,9 @@ HPG = Variant(
     profile_name="tyrosine-like_hpg_FDH",
     profile_cutoff=300,
     filename=get_full_path(str(Path(__file__).parents[1]), "data", "tyrosine-like_hpg_FDH.hmm"),
-    signature_positions=HPG_SIGNATURE,
+    signature_positions=HPG_POSITIONS,
     modification_positions=[6, 8],
-    expected_residues=TYR_HPG_SIGNATURE_RESIDUES["Hpg"],
+    expected_residues=TYR_HPG_RESIDUES["Hpg"],
     default_penalty=0.2,
     alternate_cutoffs=[(0., 0.5)],
 )
@@ -97,18 +117,20 @@ ORSELLIC = Variant(
     profile_name="cycline_orsellinic_FDH",
     profile_cutoff=500,
     filename=get_full_path(str(Path(__file__).parents[1]), "data", "cycline_orsellinic_FDH.hmm"),
-    signature_positions=OTHER_PHENOLIC_SIGNATURE,
+    signature_positions=OTHER_PHENOLIC,
     modification_positions=[6, 8],
-    expected_residues=OTHER_PHENOLIC_SIGNATURE_RESIDUES,
+    expected_residues=OTHER_PHENOLIC_RESIDUES,
 )
 
 
-def search_for_match(retrieved_residues: dict[str, str],
-                     halogenase: FlavinDependentHalogenase,
-                     hit: HalogenaseHmmResult, positions: list[int],
-                     cutoffs: list[int], *,
-                     expected_residues: dict[str, str],
-                     confidence: float = 1.) -> bool:
+def search_for_match(
+    retrieved_residues: dict[str, str],
+    halogenase: FlavinDependentHalogenase,
+    hit: HalogenaseHmmResult, positions: list[int],
+    cutoffs: list[int], *,
+    expected_residues: dict[str, str],
+    confidence: float = 1.,
+) -> bool:
     """ Looks whether there are hmm hits that meet the requirement for the categorization
 
         Arguments:
@@ -155,6 +177,10 @@ def search_for_match(retrieved_residues: dict[str, str],
                 halogenase.add_potential_match(Match(hit.query_id, "flavin", "FDH",
                                                     confidence * modifier, retrieved_residues,
                                                     target_positions=positions, substrates=["Tyr"]))
+                halogenase.add_potential_match(Match(hit.query_id, "flavin", "FDH",
+                                                    confidence * modifier * .5,
+                                                    retrieved_residues["Hpg"],
+                                                    target_positions=positions, substrates=["Hpg"]))
                 return True
 
             # TODO: can we never hit Hpg by itself?
@@ -176,7 +202,8 @@ def search_for_match(retrieved_residues: dict[str, str],
 
 def update_match(retrieved_residues: dict[str, str],
                  halogenase: FlavinDependentHalogenase,
-                 hit: HalogenaseHmmResult) -> None:
+                 hit: HalogenaseHmmResult,
+                 ) -> None:
     """ Looks whether there are hmm hits that meet the requirement for the categorization
         as Tyr, Hpg, or cycline/orsellinic-like halogenase
 
@@ -196,14 +223,14 @@ def update_match(retrieved_residues: dict[str, str],
     if hit.hit_id == "tyrosine-like_hpg_FDH":
         search_for_match(retrieved_residues, halogenase, hit, [6, 8],
                          cutoffs=[SPECIFIC_PROFILES[0].cutoff, 390],
-                         expected_residues=TYR_HPG_SIGNATURE_RESIDUES)
+                         expected_residues=TYR_HPG_RESIDUES)
     elif hit.hit_id == "cycline_orsellinic_FDH":
         search_for_match(retrieved_residues, halogenase, hit, [6, 8],
                          cutoffs=SPECIFIC_PROFILES[1].cutoff,
-                         expected_residues=OTHER_PHENOLIC_SIGNATURE_RESIDUES)
+                         expected_residues=OTHER_PHENOLIC_RESIDUES)
 
 
-def get_consensus_signature(cds: CDSFeature, hit: HalogenaseHmmResult
+def get_consensus_signature(cds: CDSFeature, hit: HalogenaseHmmResult,
                             ) -> Union[dict, dict[str, str]]:
     """ Retrieves the residues from the substrate-specific,
         pHMMs that are in the positions of the signature residues
@@ -222,13 +249,13 @@ def get_consensus_signature(cds: CDSFeature, hit: HalogenaseHmmResult
     residues = {}
     if hit.query_id == "tyrosine-like_hpg_FDH":
         residues = substrate_analysis.retrieve_fdh_signature_residues(cds.translation, hit,
-                                                                      [TYROSINE_LIKE_SIGNATURE,
-                                                                       HPG_SIGNATURE],
+                                                                      [TYROSINE_LIKE_POSITIONS,
+                                                                       HPG_POSITIONS],
                                                                       enzyme_substrates=["Tyr",
                                                                                          "Hpg"])
         return {"tyrosine-like_hpg_FDH": residues}
 
     if hit.query_id == "cycline_orsellinic_FDH":
         residues = substrate_analysis.retrieve_fdh_signature_residues(cds.translation, hit,
-                                                                      OTHER_PHENOLIC_SIGNATURE)
+                                                                      OTHER_PHENOLIC)
     return residues
