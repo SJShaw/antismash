@@ -86,7 +86,7 @@ class Variant:
         return HmmSignature(self.profile_name, self.description, self.profile_cutoff, self.filename)
 
     def get_matches(self, retrieved_residues: str, halogenase: FlavinDependentHalogenase, hit: HalogenaseHmmResult) -> list[Match]:
-        pass
+        return []
 
 
 TYR = Variant(
