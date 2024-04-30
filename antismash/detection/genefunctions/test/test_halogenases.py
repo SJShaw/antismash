@@ -328,7 +328,7 @@ class TestPhenolic(PhenolicBase):
             assert categorize_on_substrate_level(DummyCDS(), self.tyr_enzyme,
                                                  self.tyrosine_hmm_result) is None
 
-    def test_negative_search_for_match(self):
+    def test_no_matches(self):
         assert not phenolic.search_for_match(phenolic.TYR_HPG_RESIDUES,
                                              self.tyr_enzyme,
                                              self.less_confident_tyrosine_hmm_result,
@@ -341,11 +341,13 @@ class TestPhenolic(PhenolicBase):
                                              [6, 8], [1000, 500],
                                              expected_residues=phenolic.TYR_HPG_RESIDUES)
 
-        assert not phenolic.search_for_match(phenolic.TYR_HPG_RESIDUES,
-                                             self.tyr_enzyme,
-                                             self.less_confident_tyrosine_hmm_result,
-                                             [6, 8], "false_cutoff",
-                                             expected_residues=phenolic.TYR_HPG_RESIDUES)
+    def test_bad_types(self):
+        with self.assertRaises(TypeError):
+            phenolic.search_for_match(phenolic.TYR_HPG_RESIDUES,
+                                      self.tyr_enzyme,
+                                      self.less_confident_tyrosine_hmm_result,
+                                      [6, 8], 1000,  # this cutoff must be a list when giving multiple residue options
+                                      expected_residues=phenolic.TYR_HPG_RESIDUES)
 
     def test_retrieve_fdh_signature_residues(self):
         with patch.object(subprocessing.hmmpfam, "run_hmmpfam2") as run_hmmpfam2:

@@ -189,7 +189,7 @@ def search_for_match(
                 raise NotImplementedError()
 
         return False
-    if isinstance(cutoffs, int):
+    elif isinstance(cutoffs, int) and not (isinstance(expected_residues, dict) and isinstance(retrieved_residues, dict)):
         if retrieved_residues != expected_residues or hit.bitscore < cutoffs:
             return False
         halogenase.add_potential_match(Match(hit.query_id, "flavin", "FDH",
@@ -197,7 +197,7 @@ def search_for_match(
                                                     target_positions=positions,
                                                     substrates=["cycline_orsellinic-like"]))
         return True
-    return False
+    raise TypeError("unknown/unhandled types passed")
 
 
 def update_match(retrieved_residues: dict[str, str],
