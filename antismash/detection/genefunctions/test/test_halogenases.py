@@ -385,54 +385,57 @@ class TestPyrrolic(PyrrolicBase):
                     hit_query.seq = TRANSLATIONS["bmp2"]
                     hit_profile.seq = TRANSLATIONS["bmp2"]
                     hit.aln = [hit_profile, hit_query]
-            assert pyrrolic.get_consensus_signature(DummyCDS(translation=TRANSLATIONS["bmp2"]),
-                                                    self.pyrrole_hmm_result)["pyrrole_FDH"]
+            sigs = pyrrolic.get_consensus_signature(DummyCDS(translation=TRANSLATIONS["bmp2"]),
+                                                    self.pyrrole_hmm_result)
+            assert sigs == {'pyrrole_FDH': 'RAKDIM'}
 
     def test_check_for_fdh(self):
+        cds = DummyCDS()
         with patch.object(pyrrolic, "get_consensus_signature",
                           return_value={"pyrrole_FDH": pyrrolic.PYRROLE_SIGNATURE_RESIDUES}) as patched:
-            assert not categorize_on_substrate_level(DummyCDS(), self.pyrrole_enzyme,
+            # make the score below the cutoff
+            assert not categorize_on_substrate_level(cds, self.pyrrole_enzyme,
                                                      [self.negative_pyrrole_hmm_result])
-            patched.assert_called_once()
+            patched.assert_called_once_with(cds, self.negative_pyrrole_hmm_result)
 
         with patch.object(pyrrolic, "get_consensus_signature",
                           return_value={"pyrrole_FDH": None}) as patched:
-            assert not categorize_on_substrate_level(DummyCDS(), self.pyrrole_enzyme,
+            assert not categorize_on_substrate_level(cds, self.pyrrole_enzyme,
                                                      [self.pyrrole_hmm_result])
-            patched.assert_called_once()
+            patched.assert_called_once_with(cds, self.pyrrole_hmm_result)
 
         # conventional mono/dihalogenating pyrrole-halogenase
         with patch.object(pyrrolic, "get_consensus_signature",
                           return_value={"pyrrole_FDH": "DRSVFW"}) as patched:
-            assert categorize_on_substrate_level(DummyCDS(), self.pyrrole_enzyme,
+            assert categorize_on_substrate_level(cds, self.pyrrole_enzyme,
                                                  [self.pyrrole_hmm_result])
             assert self.pyrrole_enzyme.potential_matches[0].profile == "pyrrole_FDH"
             assert self.pyrrole_enzyme.potential_matches[0].confidence == 1
             assert self.pyrrole_enzyme.potential_matches[0].substrates == ["pyrrole"]
             assert self.pyrrole_enzyme.potential_matches[0].number_of_decorations == "mono_di"
-            patched.assert_called_once()
+            patched.assert_called_once_with(cds, self.pyrrole_hmm_result)
 
         # unconventional mono/dihalogenating pyrrole-halogenase
         with patch.object(pyrrolic, "get_consensus_signature",
                           return_value={"pyrrole_FDH": "YRRNFN"}) as patched:
-            assert categorize_on_substrate_level(DummyCDS(), self.pyrrole_enzyme,
+            assert categorize_on_substrate_level(cds, self.pyrrole_enzyme,
                                                  [self.pyrrole_hmm_result])
             assert self.pyrrole_enzyme.potential_matches[1].profile == "pyrrole_FDH"
             assert self.pyrrole_enzyme.potential_matches[1].confidence == 1
             assert self.pyrrole_enzyme.potential_matches[1].substrates == ["pyrrole"]
             assert self.pyrrole_enzyme.potential_matches[1].number_of_decorations == "unconv_mono_di"
-            patched.assert_called_once()
+            patched.assert_called_once_with(cds, self.pyrrole_hmm_result)
 
         # tetrahalogenating pyrrole-halogenase
         with patch.object(pyrrolic, "get_consensus_signature",
                           return_value={"pyrrole_FDH": "RRYFFA"}) as patched:
-            assert categorize_on_substrate_level(DummyCDS(), self.pyrrole_enzyme,
+            assert categorize_on_substrate_level(cds, self.pyrrole_enzyme,
                                                  [self.pyrrole_hmm_result])
             assert self.pyrrole_enzyme.potential_matches[2].profile == "pyrrole_FDH"
             assert self.pyrrole_enzyme.potential_matches[2].confidence == 1
             assert self.pyrrole_enzyme.potential_matches[2].substrates == ["pyrrole"]
             assert self.pyrrole_enzyme.potential_matches[2].number_of_decorations == "tetra"
-            patched.assert_called_once()
+            patched.assert_called_once_with(cds, self.pyrrole_hmm_result)
 
     def test_negative_search_for_match(self):
         assert not pyrrolic.search_for_match(pyrrolic.PYRROLE_SIGNATURE_RESIDUES,
@@ -444,6 +447,22 @@ class TestPyrrolic(PyrrolicBase):
 
 
 class TestIndolic(IndolicBase):
+    def test_get_consensus_signature(self):
+        with patch.object(subprocessing.hmmpfam, "run_hmmpfam2") as run_hmmpfam2:
+            run_hmmpfam2.return_value = [FakeHit(1, 2, 1000, "foo")]
+            # checking if hit_id != query_id it breaks
+            for result in run_hmmpfam2.return_value:
+                result.hsps = [FakeHSPHit("ktzR", hit_id="trp_6_7_FDH")]
+                for hit in result.hsps:
+                    hit_query = DummyFeature()
+                    hit_profile = DummyFeature()
+                    hit_query.seq = TRANSLATIONS["ktzR"]
+                    hit_profile.seq = TRANSLATIONS["ktzR"]
+                    hit.aln = [hit_profile, hit_query]
+            sigs = indolic.get_consensus_signature(DummyCDS(translation=TRANSLATIONS["ktzR"]),
+                                                    self.trp_6_7_hmm_result)
+            assert sigs == {"trp_6_7_FDH": None}
+
     def test_get_best_matches(self):
         assert not self.trp_empty_enzyme.get_best_matches()
 
@@ -523,11 +542,12 @@ class TestIndolic(IndolicBase):
                     hit_profile.seq = "xfdhcgkbjlnkml"
                     hit.aln = [hit_profile, hit_query]
 
-            with patch.object(utils, "extract_by_reference_positions", return_value="dummy"):
+            with patch.object(utils, "extract_by_reference_positions", return_value="dummy") as patched:
                 signature_residues = extract_residues(TRANSLATIONS["ktzR"],
                                                      target_positions,
                                                      self.trp_6_7_hmm_result)
                 assert signature_residues == "dummy"
+                patched.assert_called_once_with("xfdhcgkbjlnkml", TRANSLATIONS["ktzR"], target_positions)
 
     def test_false_check_for_match(self):
         false_test = FDH("fake_name")
@@ -545,9 +565,11 @@ class TestIndolic(IndolicBase):
         assert not false_test.potential_matches
 
     def test_strong_trp_5(self):
+        cds = DummyCDS()
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
-                          return_value={"trp_5_FDH": indolic.TRP_5_SIGNATURE_RESIDUES}):
-            categorize_on_substrate_level(DummyCDS(), self.trp_empty_enzyme, [self.trp_5_hmm_result])
+                          return_value={"trp_5_FDH": indolic.TRP_5_SIGNATURE_RESIDUES}) as patched:
+            categorize_on_substrate_level(cds, self.trp_empty_enzyme, [self.trp_5_hmm_result])
+            patched.assert_called_once_with(cds.translation, self.trp_5_hmm_result, indolic.TRP_5_SIGNATURE)
         match = self.trp_empty_enzyme.potential_matches[0]
         assert match.profile == "trp_5_FDH"
         assert match.confidence == 1
