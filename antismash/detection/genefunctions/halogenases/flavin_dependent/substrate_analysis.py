@@ -70,16 +70,16 @@ def retrieve_fdh_signature_residues(translation: str, hmm_result: HalogenaseHmmR
     """
     signature_residues: dict[str, Optional[str]] = {}
     if not enzyme_substrates:
-        residue = search_residues(translation, signatures, hmm_result)
+        residue = extract_residues(translation, signatures, hmm_result)
         signature_residues[hmm_result.query_id] = residue
     else:
         substrates_signatures = dict(zip(enzyme_substrates, signatures))
         for substrate, signature in substrates_signatures.items():
-            signature_residues[substrate] = search_residues(translation, signature, hmm_result)
+            signature_residues[substrate] = extract_residues(translation, signature, hmm_result)
     return signature_residues
 
 
-def search_residues(sequence: str, positions: Union[list[int], list[list[int]]],
+def extract_residues(sequence: str, positions: Union[list[int], list[list[int]]],
                     hmm_result: HalogenaseHmmResult,
                     max_evalue: float = 0.1) -> Optional[str]:
     """ Get the signature residues from the pHMM for the searched protein sequence
@@ -134,7 +134,7 @@ def search_conserved_motif(cds: CDSFeature, motif_positions: list[int],
     """
 
     categorized = ""
-    signature_residues = search_residues(cds.translation,
+    signature_residues = extract_residues(cds.translation,
                                          motif_positions,
                                          hmm_result)
     if not signature_residues:

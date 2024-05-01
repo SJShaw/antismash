@@ -98,7 +98,7 @@ def get_consensus_signature(cds: CDSFeature, hit: HalogenaseHmmResult
     """
 
     if hit.query_id == "pyrrole_FDH":
-        signature_residues = substrate_analysis.search_residues(cds.translation,
+        signature_residues = substrate_analysis.extract_residues(cds.translation,
                                                                 PYRROLE_SIGNATURE,
                                                                 hit)
     return {"pyrrole_FDH": signature_residues}
