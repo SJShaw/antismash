@@ -146,8 +146,8 @@ def get_tyr_hpg_residues(translation: str, hmm_result: HalogenaseHmmResult) -> d
             signature residues which were retrieved from a certain pHMM
     """
     signature_residues: dict[str, str] = {}
-    substrates_signatures = dict(zip(["Tyr", "Hpg"], [TYROSINE_LIKE_SIGNATURE, HPG_SIGNATURE]))
-    for substrate, signature in substrates_signatures.items():
+    substrate_signatures = {"Tyr": TYROSINE_LIKE_SIGNATURE, "Hpg": HPG_SIGNATURE}
+    for substrate, signature in substrate_signatures.items():
         residues = substrate_analysis.search_residues(translation, signature, hmm_result)
         if residues:
             signature_residues[substrate] = residues
