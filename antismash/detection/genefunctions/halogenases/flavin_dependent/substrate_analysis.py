@@ -215,7 +215,7 @@ def categorize_on_consensus_level(cds: CDSFeature, specific_hmm_hits: list[Halog
 
     return enzyme
 
-def fdh_specific_analysis(record: Record) -> Union[list, list[FlavinDependentHalogenases]]:
+def fdh_specific_analysis(record: Record) -> list[FlavinDependentHalogenases]:
     """ Categorization of enzyme, categorizes any halogenase in a cds in regions
 
         Arguments: record instance,
