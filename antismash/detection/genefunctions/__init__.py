@@ -13,9 +13,9 @@ from antismash.common.secmet import Record
 from antismash.config import ConfigType, get_config
 from antismash.config.args import ModuleArgs
 from antismash.detection import DetectionStage
-from .halogenases.halogenases_analysis import specific_analysis
 
 from .core import FunctionResults
+from .halogenases import specific_analysis
 from .tools import run_tools
 
 NAME = "genefunctions"

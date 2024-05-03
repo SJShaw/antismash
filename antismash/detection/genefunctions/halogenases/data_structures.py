@@ -4,35 +4,12 @@
 # for test files, silence irrelevant and noisy pylint warnings
 # pylint: disable=use-implicit-booleaness-not-comparison,protected-access,missing-docstring
 
-from typing import Any, ClassVar, Iterable, Optional, Self, Union
-
 from dataclasses import dataclass, field
+from functools import cached_property
+from typing import Any, ClassVar, Iterable, Iterator, Optional, Self, Union
 
 from antismash.common.hmmscan_refinement import HMMResult
-
-NAME = "halogenases_analysis"
-
-
-class HalogenaseHmmResult(HMMResult):
-    """ Enzymes identified as a halogenase
-
-        hit_id: name of the matching profile
-        start: start position within the query's translation
-        end: end position within the query's translation
-        evalue: e-value of the hit
-        bitscore: bitscore of the hit
-        query_id: name of the profile
-        enzyme_type: type of halogenase (e.g. Flavin-dependent, SAM-dependent)
-        profile: path to the pHMM file
-        internal_hits: any hits contained by this hit
-    """
-    def __init__(self, hit_id: str, bitscore: float, query_id: str, enzyme_type: str,
-                 profile: str, start: int = 0, end: int = 0, evalue: float = 0.0,
-                 internal_hits: Iterable[HMMResult] = None) -> None:
-        super().__init__(hit_id, start, end, evalue, bitscore, internal_hits=internal_hits)
-        self.query_id = query_id
-        self.enzyme_type = enzyme_type
-        self.profile = profile
+from antismash.common.signature import HmmSignature
 
 
 @dataclass
@@ -72,8 +49,11 @@ class FlavinDependentHalogenase:
     family: ClassVar[str] = "FDH"
 
     def add_potential_match(self, match: Match) -> None:
-        """ Adds the features of an enzyme group to list"""
+        """ Adds the features of an enzyme group"""
         self.potential_matches.append(match)
+
+    def add_potential_matches(self, matches: Iterable[Match]) -> None:
+        self.potential_matches.extend(matches)
 
     def get_best_matches(self) -> list[Match]:
         """ If an enzyme meets the requirements for several groups,
@@ -150,3 +130,103 @@ class FlavinDependentHalogenase:
 
     def __repr__(self) -> str:
         return f"FlavinDependentHalogenase({self.cds_name=}, {self.confidence=}, {self.potential_matches=})"
+
+
+class HalogenaseHmmResult(HMMResult):
+    """ Enzymes identified as a halogenase
+
+        hit_id: name of the matching profile
+        start: start position within the query's translation
+        end: end position within the query's translation
+        evalue: e-value of the hit
+        bitscore: bitscore of the hit
+        query_id: name of the profile
+        enzyme_type: type of halogenase (e.g. Flavin-dependent, SAM-dependent)
+        profile: path to the pHMM file
+        internal_hits: any hits contained by this hit
+    """
+    def __init__(self, hit_id: str, bitscore: float, query_id: str, enzyme_type: str,
+                 profile: str, start: int = 0, end: int = 0, evalue: float = 0.0,
+                 internal_hits: Iterable[HMMResult] = None) -> None:
+        super().__init__(hit_id, start, end, evalue, bitscore, internal_hits=internal_hits)
+        self.query_id = query_id
+        self.enzyme_type = enzyme_type
+        self.profile = profile
+
+
+@dataclass(frozen=True, kw_only=True)
+class MotifDetails:
+    name: str
+    positions: tuple[int, ...]
+    residues: str
+
+    def __post_init__(self) -> None:
+        assert isinstance(self.positions[0], int)
+        assert len(list(self.positions)) == len(self.residues)
+        assert tuple(sorted(self.positions)) == self.positions
+
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, MotifDetails):
+            return other.residues == self.residues
+        if isinstance(other, str):
+            return other == self.residues
+        return False
+
+    def __iter__(self) -> Iterator[tuple[int, str]]:
+        return zip(self.positions, self.residues)
+
+    @classmethod
+    def from_dict(cls, name: str, data: dict[int, str]) -> Self:
+        positions, residues = zip(*sorted(data.items()))
+        return cls(name=name, positions=positions, residues="".join(residues))
+
+    @classmethod
+    def from_other(cls, name: str, other: Self, additions: dict[int, str]) -> Self:
+        base = dict(other)
+        base.update(additions)
+        return cls.from_dict(name, base)
+
+
+@dataclass(frozen=True, kw_only=True)
+class Profile:
+    description: str
+    profile_name: str
+    profile_cutoff: int
+    filename: str
+
+    motifs: dict[str, MotifDetails]
+    modification_positions: list[int]
+
+    default_penalty: float = 0.8  # additive, not multiplicative
+    alternate_cutoffs: list[float] = field(default_factory=list)
+
+    @cached_property
+    def profile(self) -> HmmSignature:
+        return HmmSignature(self.profile_name, self.description, self.profile_cutoff, self.filename)
+
+    def get_matches_from_hit(self, retrieved_residues: dict[str, str], hit: HalogenaseHmmResult, confidence: float = 1.) -> list[Match]:
+        matches = []
+
+        if hit.bitscore < self.profile_cutoff:
+            return []
+
+        for name, residues in retrieved_residues.items():
+            if residues == self.motifs[name]:
+                matches.append(
+                    Match(hit.query_id, "flavin", "FDH", confidence, residues,
+                          target_positions=self.modification_positions, substrates=[name])
+                )
+                print("adding match", matches[-1])
+        return matches
+
+    @cached_property
+    def motif_names(self) -> list[str]:
+        return list(self.motifs)
+
+    @cached_property
+    def motif_positions(self) -> tuple[tuple[int, ...], ...]:
+        return tuple(motif.positions for motif in self.motifs.values())
+
+    @cached_property
+    def motif_residues(self) -> dict[str, str]:
+        return {name: motif.residues for name, motif in self.motifs.items()}

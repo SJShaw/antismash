@@ -6,7 +6,8 @@
 
 import re
 from collections import defaultdict
-from typing import Optional, Union
+from dataclasses import dataclass
+from typing import cast, Iterable, Optional, Union
 
 from antismash.common.secmet import (
     CDSFeature,
@@ -19,7 +20,7 @@ from antismash.common import (
     utils,
 )
 
-from antismash.detection.genefunctions.halogenases.halogenases import (
+from antismash.detection.genefunctions.halogenases.data_structures import (
     FlavinDependentHalogenase,
     HalogenaseHmmResult,
 )
@@ -33,20 +34,38 @@ from antismash.detection.genefunctions.halogenases.flavin_dependent.subgroups im
     pyrrolic
 )
 
+
+@dataclass
+class SubModule:
+    SPECIFIC_PROFILES: list[HmmSignature]
+
+    @staticmethod
+    def update_match(retrieved_residues: dict[str, str],
+                     halogenase: FlavinDependentHalogenase,
+                     hit: HalogenaseHmmResult,
+                     ) -> None:
+        raise NotImplementedError()
+
+    @staticmethod
+    def get_consensus_signature(cds: CDSFeature, hit: HalogenaseHmmResult,
+                                ) -> dict[str, dict[str, str]]:
+        raise NotImplementedError()
+
+
 # pHMM ids and the submodules they belong to for use in calling submodule-specific functions
-FDH_SUBGROUPS = {
-    "trp_5_FDH": indolic,
-    "trp_6_7_FDH": indolic,
-    "cycline_orsellinic_FDH": phenolic,
-    "tyrosine-like_hpg_FDH": phenolic,
-    "pyrrole_FDH": pyrrolic,
+FDH_SUBGROUPS: dict[str, SubModule] = {
+    "trp_5_FDH": cast(SubModule, indolic),
+    "trp_6_7_FDH": cast(SubModule, indolic),
+    "cycline_orsellinic_FDH": cast(SubModule, phenolic),
+    "tyrosine-like_hpg_FDH": cast(SubModule, phenolic),
+    "pyrrole_FDH": cast(SubModule, pyrrolic),
 }
 
 
 def _get_substrate_specific_profiles() -> list[HmmSignature]:
     """ Collects the substrate-specific pHMM profiles from the substrate-specific submodules"""
     profiles = []
-    submodules = list(set(FDH_SUBGROUPS.values()))
+    submodules: list[SubModule] = list(set(FDH_SUBGROUPS.values()))
     for submodule in submodules:
         for profile in submodule.SPECIFIC_PROFILES:
             profiles.append(profile)
@@ -54,9 +73,9 @@ def _get_substrate_specific_profiles() -> list[HmmSignature]:
 
 
 def retrieve_fdh_signature_residues(translation: str, hmm_result: HalogenaseHmmResult,
-                                    signatures: Union[list[list[int]], list[int]],
-                                    enzyme_substrates: list = None
-                                    ) -> dict[str, Optional[str]]:
+                                    signatures: Iterable[Iterable[int]],
+                                    enzyme_substrates: Union[list[str], tuple[str, ...]],
+                                    ) -> dict[str, str]:
     """ Get signature residues for an enzyme from each pHMM
 
         Arguments:
@@ -68,20 +87,17 @@ def retrieve_fdh_signature_residues(translation: str, hmm_result: HalogenaseHmmR
         Returns:
             signature residues which were retrieved from a certain pHMM
     """
-    signature_residues: dict[str, Optional[str]] = {}
-    if not enzyme_substrates:
-        residue = extract_residues(translation, signatures, hmm_result)
-        signature_residues[hmm_result.query_id] = residue
-    else:
-        substrates_signatures = dict(zip(enzyme_substrates, signatures))
-        for substrate, signature in substrates_signatures.items():
-            signature_residues[substrate] = extract_residues(translation, signature, hmm_result)
+    signature_residues: dict[str, str] = {}
+    for substrate, signature in zip(enzyme_substrates, signatures):
+        residues = extract_residues(translation, signature, hmm_result)
+        if residues:
+            signature_residues[substrate] = residues
     return signature_residues
 
 
-def extract_residues(sequence: str, positions: Union[list[int], list[list[int]]],
-                    hmm_result: HalogenaseHmmResult,
-                    max_evalue: float = 0.1) -> Optional[str]:
+def extract_residues(sequence: str, positions: Iterable[int],
+                     hmm_result: HalogenaseHmmResult,
+                     max_evalue: float = 0.1) -> Optional[str]:
     """ Get the signature residues from the pHMM for the searched protein sequence
 
         Arguments:
@@ -135,8 +151,8 @@ def search_conserved_motif(cds: CDSFeature, motif_positions: list[int],
 
     categorized = ""
     signature_residues = extract_residues(cds.translation,
-                                         motif_positions,
-                                         hmm_result)
+                                          motif_positions,
+                                          hmm_result)
     if not signature_residues:
         return categorized
 

@@ -16,7 +16,7 @@ from antismash.common.secmet.qualifiers import GeneFunction
 from antismash.common.test import helpers
 from antismash.config import build_config, destroy_config, get_config, update_config
 from antismash.detection.genefunctions import prepare_data
-from antismash.detection.genefunctions.halogenases.halogenases_analysis import specific_analysis as halo_analysis
+from antismash.detection.genefunctions.halogenases import specific_analysis as halo_analysis
 
 # this particular one is ChlB4 from... TODO?
 CHLB4 = """

@@ -5,31 +5,48 @@
 # pylint: disable=use-implicit-booleaness-not-comparison,protected-access,missing-docstring
 
 from pathlib import Path
-from typing import Union, Optional
 
 from antismash.common.secmet import CDSFeature
 from antismash.common.path import get_full_path
-from antismash.common.signature import HmmSignature
-from antismash.detection.genefunctions.halogenases.halogenases import (
-    Match,
+from antismash.detection.genefunctions.halogenases.data_structures import (
+    FlavinDependentHalogenase,
     HalogenaseHmmResult,
-    FlavinDependentHalogenase)
+    Match,
+    MotifDetails,
+    Profile,
+)
 from antismash.detection.genefunctions.halogenases.flavin_dependent import substrate_analysis
 
-SPECIFIC_PROFILES = [HmmSignature("pyrrole_FDH",
-                                  "Pyrrole halogenase",
-                                  400, get_full_path(str(Path(__file__).parents[1]),
-                                                     "data", "pyrrole_FDH.hmm"))]
+TRP_6_MOTIF = MotifDetails(
+    name="Trp_6",
+    positions=(19, 37, 45, 73, 75, 90, 129, 130, 142, 157, 181, 192, 194, 219, 221,
+               225, 227, 237, 287, 306, 337, 339, 350, 353, 356, 411, 462, 505),
+    residues="TEGCAGFDAYHDRFGNADYGLSIIAKIL",
+)
 
-PYRROLE_SIGNATURE = [110, 111, 318, 322, 348, 362]
+MODIFICATION_COUNT_POSITIONS = (110, 111, 318, 322, 348, 362)
 
-PYRROLE_SIGNATURE_RESIDUES = {"mono_di":"DRSVFW",
-                              "unconv_mono_di":"YRRNFN",
-                              "tetra":"RRYFFA"}
+PYRROLE = Profile(
+    description="Pyrrole halogenase",
+    profile_name="pyrrole_FDH",
+    profile_cutoff=400,
+    filename=get_full_path(str(Path(__file__).parents[1]), "data", "pyrrole_FDH.hmm"),
+    motifs={
+        "mono_di": MotifDetails(name="mono_di", positions=MODIFICATION_COUNT_POSITIONS, residues="DRSVFW"),
+        "unconv_mono_di": MotifDetails(name="unconv_mono_di", positions=MODIFICATION_COUNT_POSITIONS, residues="YRRNFN"),
+        "tetra": MotifDetails(name="tetra_mono_di", positions=MODIFICATION_COUNT_POSITIONS, residues="RRYFFA"),
+    },
+    modification_positions=[5],
+)
+
+VARIANTS = [PYRROLE]
+
+SPECIFIC_PROFILES = [variant.profile for variant in VARIANTS]
+
 
 def search_for_match(retrieved_residues: dict[str, str], halogenase: FlavinDependentHalogenase,
                      hit: HalogenaseHmmResult, cutoff: float, *,
-                     expected_residues: Union[str, dict[str,str]] = "", confidence: float = 1
+                     expected_residues: dict[str, str], confidence: float = 1
                      ) -> bool:
     """ Looks whether there are hmm hits that meet the requirement for the categorization
 
@@ -47,16 +64,17 @@ def search_for_match(retrieved_residues: dict[str, str], halogenase: FlavinDepen
             then it adds the match, without returning anything,
             otherwise, it returns nothing
     """
-    if (not isinstance(expected_residues, dict) or hit.bitscore < cutoff):
+    if hit.bitscore < cutoff:
         return False
     for subs, sig_res in expected_residues.items():
         if retrieved_residues == expected_residues[subs]:
             halogenase.add_potential_match(Match(hit.query_id, "flavin", "FDH",
-                                                    confidence, sig_res,
-                                                    number_of_decorations=subs,
-                                                    substrates=["pyrrole"]))
+                                                 confidence, sig_res,
+                                                 number_of_decorations=subs,
+                                                 substrates=["pyrrole"]))
             return True
     return False
+
 
 def update_match(retrieved_residues: dict[str, str],
                  halogenase: FlavinDependentHalogenase,
@@ -79,10 +97,11 @@ def update_match(retrieved_residues: dict[str, str],
     if hit.hit_id == "pyrrole_FDH":
         search_for_match(retrieved_residues, halogenase, hit,
                          cutoff=SPECIFIC_PROFILES[0].cutoff,
-                         expected_residues=PYRROLE_SIGNATURE_RESIDUES)
+                         expected_residues=PYRROLE.motif_residues)
+
 
 def get_consensus_signature(cds: CDSFeature, hit: HalogenaseHmmResult
-                            ) -> dict[str, Optional[str]]:
+                            ) -> dict[str, dict[str, str]]:
     """ Retrieves the residues from the substrate-specific,
         pHMMs that are in the positions of the signature residues
 
@@ -97,8 +116,10 @@ def get_consensus_signature(cds: CDSFeature, hit: HalogenaseHmmResult
             the sugnature residues
     """
 
-    if hit.query_id == "pyrrole_FDH":
-        signature_residues = substrate_analysis.extract_residues(cds.translation,
-                                                                PYRROLE_SIGNATURE,
-                                                                hit)
-    return {"pyrrole_FDH": signature_residues}
+    signatures = {}
+    for variant in VARIANTS:
+        if variant.motifs and hit.query_id == variant.profile_name:
+            residues = substrate_analysis.retrieve_fdh_signature_residues(cds.translation, hit, variant.motif_positions, variant.motif_names)
+            if residues:
+                signatures[variant.profile_name] = residues
+    return signatures
