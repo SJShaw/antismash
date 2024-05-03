@@ -38,6 +38,42 @@ TYR_HPG_SIGNATURE_RESIDUES = {"Tyr": "GFQRLGDAGLSGVPSYGADPSGLYW",
 
 OTHER_PHENOLIC_SIGNATURE_RESIDUES = "LGPRGGRDAGVDAGGYGFDPSG"
 
+TYR_HPG_MODIFICATION_POSITIONS = [6, 8]
+
+def find_tyr_hpg_matches(retrieved_residues: dict[str, str],
+                         hit: HalogenaseHmmResult,
+                         cutoffs: list[int], *,
+                         expected_residues: dict[str, str],
+                         confidence: float = 1.,
+                         ) -> list[Match]:
+    matches = []
+    modifier = 1.
+    cutoffs.sort(reverse=True)
+    substrate_counter = 0
+    for subs, sig_res in retrieved_residues.items():
+        if sig_res == expected_residues[subs]:
+            substrate_counter += 1
+
+    for cutoff in cutoffs:
+        # matches the residues for Tyrosine and Hpg as well
+        if hit.bitscore < cutoff:
+            modifier = .5
+            continue
+        if substrate_counter == 2:
+            matches.append(Match(hit.query_id, "flavin", "FDH", confidence * modifier,
+                                 retrieved_residues["Hpg"], target_positions=TYR_HPG_MODIFICATION_POSITIONS, substrates="Hpg"))
+            matches.append(Match(hit.query_id, "flavin", "FDH", (confidence * modifier) - 0.2,
+                                 retrieved_residues["Tyr"], target_positions=TYR_HPG_MODIFICATION_POSITIONS, substrates="Tyr"))
+            return matches
+
+        if retrieved_residues["Tyr"] == expected_residues["Tyr"]:
+            matches.append(Match(hit.query_id, "flavin", "FDH",
+                           confidence * modifier, retrieved_residues,
+                           target_positions=TYR_HPG_MODIFICATION_POSITIONS, substrates="Tyr"))
+            return matches
+    return matches
+
+
 def search_for_match(retrieved_residues: Union[dict[str, str], str],
                      halogenase: FlavinDependentHalogenases,
                      hit: HalogenaseHmmResult, position: Union[int, List[int]],
@@ -61,39 +97,17 @@ def search_for_match(retrieved_residues: Union[dict[str, str], str],
             then it adds the match, without returning anything,
             otherwise, it returns False
     """
-
     # check for halogenases with Tyr or Hpg substrates
     modifier = 1.
     if (isinstance(expected_residues, dict) and isinstance(cutoffs, list)
         and isinstance(retrieved_residues, dict)):
-        cutoffs.sort(reverse=True)
-        substrate_counter = 0
-        for subs, sig_res in retrieved_residues.items():
-            if sig_res == expected_residues[subs]:
-                substrate_counter += 1
+        assert position == TYR_HPG_MODIFICATION_POSITIONS
+        matches = find_tyr_hpg_matches(retrieved_residues, hit, cutoffs,
+                                       expected_residues=expected_residues, confidence=confidence)
+        for match in matches:
+            halogenase.add_potential_matches(match)
+        return bool(matches)
 
-        for cutoff in cutoffs:
-            # matches the residues for Tyrosine and Hpg as well
-            if hit.bitscore < cutoff:
-                modifier = .5
-                continue
-            if substrate_counter == 2:
-                halogenase.add_potential_matches(Match(hit.query_id, "flavin", "FDH",
-                                                    confidence * modifier,
-                                                    retrieved_residues["Hpg"],
-                                                    target_positions=position, substrates="Hpg"))
-                halogenase.add_potential_matches(Match(hit.query_id, "flavin", "FDH",
-                                                       (confidence * modifier)-0.2,
-                                                       retrieved_residues["Tyr"],
-                                                       target_positions=position, substrates="Tyr"))
-                return True
-
-            if retrieved_residues["Tyr"] == expected_residues["Tyr"]:
-                halogenase.add_potential_matches(Match(hit.query_id, "flavin", "FDH",
-                                                    confidence * modifier, retrieved_residues,
-                                                    target_positions=position, substrates="Tyr"))
-                return True
-        return False
     if isinstance(cutoffs, int) and not (isinstance(expected_residues, dict) and isinstance(retrieved_residues, dict)):
         if retrieved_residues != expected_residues or hit.bitscore < cutoffs:
             return False
