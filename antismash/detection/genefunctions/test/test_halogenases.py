@@ -332,26 +332,28 @@ class TestPhenolic(PhenolicBase):
                                                  self.tyrosine_hmm_result) is None
 
 class TestSearchForMatch(PhenolicBase):
-    def test_single_cutoff(self):
-        assert not phenolic.search_for_match(phenolic.TYR_HPG_SIGNATURE_RESIDUES,
-                                             self.tyr_empty_enzyme,
-                                             self.less_confident_tyrosine_hmm_result,
-                                             [6, 8], 1000,
-                                             expected_residues=phenolic.TYR_HPG_SIGNATURE_RESIDUES)
+    def test_mismatching_cutoff(self):
+        with self.assertRaises(TypeError):
+            phenolic.search_for_match(phenolic.TYR_HPG_SIGNATURE_RESIDUES,
+                                      self.tyr_empty_enzyme,
+                                      self.less_confident_tyrosine_hmm_result,
+                                      [6, 8], 1000,
+                                      expected_residues=phenolic.TYR_HPG_SIGNATURE_RESIDUES)
 
-    def test_multiple_cutoffs(self):
+    def test_matching_cutoff_count(self):
         assert not phenolic.search_for_match(phenolic.TYR_HPG_SIGNATURE_RESIDUES,
                                              self.tyr_empty_enzyme,
                                              self.less_confident_tyrosine_hmm_result,
                                              [6, 8], [1000, 500],
                                              expected_residues=phenolic.TYR_HPG_SIGNATURE_RESIDUES)
 
-    def test_invalid_cutoff(self):
-        assert not phenolic.search_for_match(phenolic.TYR_HPG_SIGNATURE_RESIDUES,
-                                             self.tyr_empty_enzyme,
-                                             self.less_confident_tyrosine_hmm_result,
-                                             [6, 8], "false_cutoff",
-                                             expected_residues=phenolic.TYR_HPG_SIGNATURE_RESIDUES)
+    def test_invalid_cutoff_types(self):
+        with self.assertRaises(TypeError):
+            phenolic.search_for_match(phenolic.TYR_HPG_SIGNATURE_RESIDUES,
+                                      self.tyr_empty_enzyme,
+                                      self.less_confident_tyrosine_hmm_result,
+                                      [6, 8], "false_cutoff",
+                                      expected_residues=phenolic.TYR_HPG_SIGNATURE_RESIDUES)
 
 
 class TestFetchingResidues(PhenolicBase):

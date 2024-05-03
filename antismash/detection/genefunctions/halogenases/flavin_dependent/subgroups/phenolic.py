@@ -94,7 +94,7 @@ def search_for_match(retrieved_residues: Union[dict[str, str], str],
                                                     target_positions=position, substrates="Tyr"))
                 return True
         return False
-    if isinstance(cutoffs, int):
+    if isinstance(cutoffs, int) and not (isinstance(expected_residues, dict) and isinstance(retrieved_residues, dict)):
         if retrieved_residues != expected_residues or hit.bitscore < cutoffs:
             return False
         halogenase.add_potential_matches(Match(hit.query_id, "flavin", "FDH",
@@ -102,7 +102,8 @@ def search_for_match(retrieved_residues: Union[dict[str, str], str],
                                                     target_positions=position,
                                                     substrates="cycline_orsellinic-like"))
         return True
-    return False
+    raise TypeError("incompatible types provided")
+
 
 def update_match(name: str, retrieved_residues: dict[str, str],
                  halogenase: FlavinDependentHalogenases,
