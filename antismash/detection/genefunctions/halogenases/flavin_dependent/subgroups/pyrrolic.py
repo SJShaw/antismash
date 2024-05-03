@@ -29,7 +29,7 @@ PYRROLE_SIGNATURE_RESIDUES = {"mono_di":"DRSVFW",
 
 def search_for_match(retrieved_residues: dict[str, str], halogenase: FlavinDependentHalogenases,
                      hit: HalogenaseHmmResult, cutoff: float, *,
-                     expected_residues: Union[str, dict[str,str]] = "", confidence: float = 1
+                     expected_residues: Union[str, dict[str,str]] = "", confidence: float = 1.
                      ) -> bool:
     """ Looks whether there are hmm hits that meet the requirement for the categorization
 

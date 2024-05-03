@@ -48,6 +48,16 @@ class Match:
     target_positions: Optional[Union[int, list[int]]] = None
     number_of_decorations: Optional[str] = None
 
+    def __post_init__(self) -> None:
+        assert isinstance(self.profile, str)
+        assert isinstance(self.cofactor, str)
+        assert isinstance(self.family, str)
+        assert isinstance(self.confidence, float)
+        assert isinstance(self.consensus_residues, (str, dict))
+        assert isinstance(self.substrates, (str, list))
+        assert isinstance(self.target_positions, (int, list)) or self.target_positions is None
+        assert isinstance(self.number_of_decorations, str) or self.number_of_decorations is None
+
     def to_json(self) -> dict[str, Any]:
         return vars(self)
 

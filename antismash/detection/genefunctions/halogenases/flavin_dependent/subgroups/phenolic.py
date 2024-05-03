@@ -172,14 +172,9 @@ def get_consensus_signature(cds: CDSFeature, hit: HalogenaseHmmResult
 
     residues = {}
     if hit.query_id == "tyrosine-like_hpg_FDH":
-        residues = substrate_analysis.retrieve_fdh_signature_residues(cds.translation, hit,
-                                                                      [TYROSINE_LIKE_SIGNATURE,
-                                                                       HPG_SIGNATURE],
-                                                                      enzyme_substrates=["Tyr",
-                                                                                         "Hpg"])
+        residues = get_tyr_hpg_residues(cds.translation, hit)
         return {"tyrosine-like_hpg_FDH": residues}
 
     if hit.query_id == "cycline_orsellinic_FDH":
-        residues = substrate_analysis.retrieve_fdh_signature_residues(cds.translation, hit,
-                                                                      OTHER_PHENOLIC_SIGNATURE)
+        residues = substrate_analysis.get_residues(cds.translation, hit, OTHER_PHENOLIC_SIGNATURE)
     return residues

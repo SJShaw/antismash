@@ -48,11 +48,10 @@ def _get_substrate_specific_profiles() -> list:
             profiles.append(profile)
     return profiles
 
-
-def retrieve_fdh_signature_residues(translation: str, hmm_result: HalogenaseHmmResult,
-                                    signatures: Union[list[list[int]], list[int]],
+def get_residues(translation: str, hmm_result: HalogenaseHmmResult,
+                                    signatures: list[int],
                                     enzyme_substrates: list = None
-                                    ) -> dict[str, Optional[str]]:
+                                    ) -> dict[str, str]:
     """ Get signature residues for an enzyme from each pHMM
 
         Arguments:
@@ -64,15 +63,11 @@ def retrieve_fdh_signature_residues(translation: str, hmm_result: HalogenaseHmmR
         Returns:
             signature residues which were retrieved from a certain pHMM
     """
-    signature_residues: dict[str, Optional[str]] = {}
-    if not enzyme_substrates:
-        residue = search_residues(translation, signatures, hmm_result)
-        signature_residues[hmm_result.query_id] = residue
-    else:
-        substrates_signatures = dict(zip(enzyme_substrates,signatures))
-        for substrate, signature in substrates_signatures.items():
-            signature_residues[substrate] = search_residues(translation, signature, hmm_result)
-    return signature_residues
+    residues = search_residues(translation, signatures, hmm_result)
+    if residues:
+        return {hmm_result.query_id: residues}
+    return {}
+
 
 def search_residues(sequence: str, positions: Union[list[int], list[list[int]]],
                     hmm_result: HalogenaseHmmResult,
@@ -187,7 +182,7 @@ def categorize_on_substrate_level(cds: CDSFeature, halogenase_match: FlavinDepen
     for hit in hmm_results:
         if hit.query_id in FDH_SUBGROUPS:
             signature_residues = FDH_SUBGROUPS[hit.query_id].get_consensus_signature(cds, hit)
-            specific_signature_residues = signature_residues[hit.query_id]
+            specific_signature_residues = signature_residues.get(hit.query_id)
             if not specific_signature_residues:
                 return None
             FDH_SUBGROUPS[hit.query_id].update_match(hit.query_id,
