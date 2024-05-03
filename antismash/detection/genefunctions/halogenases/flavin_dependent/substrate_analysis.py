@@ -7,7 +7,7 @@
 import logging
 import re
 from collections import defaultdict
-from typing import Union, Optional
+from typing import Optional
 
 from antismash.common.secmet import (
     CDSFeature,
@@ -49,27 +49,25 @@ def _get_substrate_specific_profiles() -> list:
     return profiles
 
 def get_residues(translation: str, hmm_result: HalogenaseHmmResult,
-                                    signatures: list[int],
-                                    enzyme_substrates: list = None
+                                    signature_positions: list[int],
                                     ) -> dict[str, str]:
     """ Get signature residues for an enzyme from each pHMM
 
         Arguments:
             sequence: protein sequence
-            hmm_result: instance of HmmResult class,
-                        which contains information about the hit in a pHMM
-            signatures: list of the positions that defines the signature residues in a pHMM
+            hmm_result: the pHMM hit
+            signature_positions: the positions that define the signature within the hit
 
         Returns:
-            signature residues which were retrieved from a certain pHMM
+            the residues from those positions
     """
-    residues = search_residues(translation, signatures, hmm_result)
+    residues = search_residues(translation, signature_positions, hmm_result)
     if residues:
         return {hmm_result.query_id: residues}
     return {}
 
 
-def search_residues(sequence: str, positions: Union[list[int], list[list[int]]],
+def search_residues(sequence: str, positions: list[int],
                     hmm_result: HalogenaseHmmResult,
                     max_evalue: float = 0.1) -> Optional[str]:
     """ Get the signature residues from the pHMM for the searched protein sequence
