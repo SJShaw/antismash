@@ -5,7 +5,7 @@
 # pylint: disable=use-implicit-booleaness-not-comparison,protected-access,missing-docstring
 
 from pathlib import Path
-from typing import Union, List
+from typing import Union
 
 from antismash.common.secmet import CDSFeature
 from antismash.common.path import get_full_path
@@ -38,20 +38,20 @@ TYR_HPG_SIGNATURE_RESIDUES = {"Tyr": "GFQRLGDAGLSGVPSYGADPSGLYW",
 
 OTHER_PHENOLIC_SIGNATURE_RESIDUES = "LGPRGGRDAGVDAGGYGFDPSG"
 
-TYR_HPG_MODIFICATION_POSITIONS = [6, 8]
+MODIFICATION_POSITIONS = [6, 8]
 
 def find_tyr_hpg_matches(retrieved_residues: dict[str, str],
                          hit: HalogenaseHmmResult,
-                         cutoffs: list[int], *,
-                         expected_residues: dict[str, str],
+                         *,
                          confidence: float = 1.,
                          ) -> list[Match]:
+    cutoffs=[SPECIFIC_PROFILES[0].cutoff, 390]
     matches = []
     modifier = 1.
     cutoffs.sort(reverse=True)
     substrate_counter = 0
     for subs, sig_res in retrieved_residues.items():
-        if sig_res == expected_residues[subs]:
+        if sig_res == TYR_HPG_SIGNATURE_RESIDUES[subs]:
             substrate_counter += 1
 
     for cutoff in cutoffs:
@@ -61,35 +61,27 @@ def find_tyr_hpg_matches(retrieved_residues: dict[str, str],
             continue
         if substrate_counter == 2:
             matches.append(Match(hit.query_id, "flavin", "FDH", confidence * modifier,
-                                 retrieved_residues["Hpg"], target_positions=TYR_HPG_MODIFICATION_POSITIONS, substrates="Hpg"))
+                                 retrieved_residues["Hpg"], target_positions=MODIFICATION_POSITIONS, substrates="Hpg"))
             matches.append(Match(hit.query_id, "flavin", "FDH", (confidence * modifier) - 0.2,
-                                 retrieved_residues["Tyr"], target_positions=TYR_HPG_MODIFICATION_POSITIONS, substrates="Tyr"))
+                                 retrieved_residues["Tyr"], target_positions=MODIFICATION_POSITIONS, substrates="Tyr"))
             return matches
 
-        if retrieved_residues["Tyr"] == expected_residues["Tyr"]:
+        if retrieved_residues["Tyr"] == TYR_HPG_SIGNATURE_RESIDUES["Tyr"]:
             matches.append(Match(hit.query_id, "flavin", "FDH",
                            confidence * modifier, retrieved_residues,
-                           target_positions=TYR_HPG_MODIFICATION_POSITIONS, substrates="Tyr"))
+                           target_positions=MODIFICATION_POSITIONS, substrates="Tyr"))
             return matches
     return matches
 
 
-def search_for_match(retrieved_residues: Union[dict[str, str], str],
-                     halogenase: FlavinDependentHalogenases,
-                     hit: HalogenaseHmmResult, position: Union[int, List[int]],
-                     cutoffs: Union[List[int], int], *,
-                     expected_residues: Union[str, dict[str, str]],
-                     confidence: float = 1.) -> bool:
+def find_orsellinic_matches(retrieved_residues: str, hit: HalogenaseHmmResult,
+                     *, confidence: float = 1.) -> list[Match]:
     """ Looks whether there are hmm hits that meet the requirement for the categorization
 
         Arguments:
             retrieved_residues: residues of the protein sequence
                                 in the place of the signature residues
-            halogenase: initiated flavin-dependent halogenase
             hit: details of the hit (e.g. bitscore, name of the profile, etc.)
-            position: position of decoration
-            cutoffs: threshold(s) for the pHMM
-            expected_residues: expected, substrate-specific signature residues
             confidence: reliability of the categorization
 
         Returns:
@@ -97,29 +89,18 @@ def search_for_match(retrieved_residues: Union[dict[str, str], str],
             then it adds the match, without returning anything,
             otherwise, it returns False
     """
-    # check for halogenases with Tyr or Hpg substrates
     modifier = 1.
-    if (isinstance(expected_residues, dict) and isinstance(cutoffs, list)
-        and isinstance(retrieved_residues, dict)):
-        assert position == TYR_HPG_MODIFICATION_POSITIONS
-        matches = find_tyr_hpg_matches(retrieved_residues, hit, cutoffs,
-                                       expected_residues=expected_residues, confidence=confidence)
-        for match in matches:
-            halogenase.add_potential_matches(match)
-        return bool(matches)
-
-    if isinstance(cutoffs, int) and not (isinstance(expected_residues, dict) and isinstance(retrieved_residues, dict)):
-        if retrieved_residues != expected_residues or hit.bitscore < cutoffs:
-            return False
-        halogenase.add_potential_matches(Match(hit.query_id, "flavin", "FDH",
-                                                    confidence * modifier, retrieved_residues,
-                                                    target_positions=position,
-                                                    substrates="cycline_orsellinic-like"))
-        return True
-    raise TypeError("incompatible types provided")
+    if retrieved_residues != OTHER_PHENOLIC_SIGNATURE_RESIDUES or hit.bitscore < SPECIFIC_PROFILES[1].cutoff:
+        return []
+    return [
+        Match(hit.query_id, "flavin", "FDH",
+              confidence * modifier, retrieved_residues,
+              target_positions=MODIFICATION_POSITIONS,
+              substrates="cycline_orsellinic-like"),
+    ]
 
 
-def update_match(name: str, retrieved_residues: dict[str, str],
+def update_match(name: str, retrieved_residues: Union[dict[str, str], str],
                  halogenase: FlavinDependentHalogenases,
                  hit: HalogenaseHmmResult) -> None:
     """ Looks whether there are hmm hits that meet the requirement for the categorization
@@ -138,15 +119,40 @@ def update_match(name: str, retrieved_residues: dict[str, str],
             position, confidence, signature and substrate,
             otherwise, it doesn't return anything and doesn't instanciate anything
     """
-
+    matches = []
     if name == "tyrosine-like_hpg_FDH":
-        search_for_match(retrieved_residues, halogenase, hit, [6, 8],
-                         cutoffs=[SPECIFIC_PROFILES[0].cutoff, 390],
-                         expected_residues=TYR_HPG_SIGNATURE_RESIDUES)
+        assert isinstance(retrieved_residues, dict)
+        matches = find_tyr_hpg_matches(retrieved_residues, hit)
     elif name == "cycline_orsellinic_FDH":
-        search_for_match(retrieved_residues, halogenase, hit, [6, 8],
-                         cutoffs=SPECIFIC_PROFILES[1].cutoff,
-                         expected_residues=OTHER_PHENOLIC_SIGNATURE_RESIDUES)
+        assert isinstance(retrieved_residues, str)
+        matches = find_orsellinic_matches(retrieved_residues, hit)
+    else:
+        raise ValueError(f"unknown profile name: {name}")
+
+    for match in matches:
+        halogenase.add_potential_matches(match)
+
+
+def get_tyr_hpg_residues(translation: str, hmm_result: HalogenaseHmmResult) -> dict[str, str]:
+    """ Get signature residues for an enzyme from each pHMM
+
+        Arguments:
+            sequence: protein sequence
+            hmm_result: instance of HmmResult class,
+                        which contains information about the hit in a pHMM
+            signatures: list of the positions that defines the signature residues in a pHMM
+
+        Returns:
+            signature residues which were retrieved from a certain pHMM
+    """
+    signature_residues: dict[str, str] = {}
+    substrates_signatures = dict(zip(["Tyr", "Hpg"], [TYROSINE_LIKE_SIGNATURE, HPG_SIGNATURE]))
+    for substrate, signature in substrates_signatures.items():
+        residues = substrate_analysis.search_residues(translation, signature, hmm_result)
+        if residues:
+            signature_residues[substrate] = residues
+    return signature_residues
+
 
 def get_consensus_signature(cds: CDSFeature, hit: HalogenaseHmmResult
                             ) -> Union[dict, dict[str, str]]:
