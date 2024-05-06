@@ -123,7 +123,8 @@ def update_match(retrieved_residues: dict[str, str], halogenase: FlavinDependent
         matches = TRP_6.get_matches_from_hit(retrieved_residues, hit)
         if not matches:
             matches = TRP_7.get_matches_from_hit(retrieved_residues, hit, check_residues=False)
-
+    else:
+        raise ValueError(f"unhandled profile identifier: {hit.query_id}")
     halogenase.add_potential_matches(matches)
 
 

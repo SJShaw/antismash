@@ -553,10 +553,8 @@ class TestIndolic(IndolicBase):
             enzyme_type="Flavin-dependent",
             profile=indolic.SPECIFIC_PROFILES[1].path,
         )
-        FDH_SUBGROUPS["trp_5_FDH"].update_match(false_test_residues, false_test, hit)
-        assert false_test.substrates is None
-        assert false_test.target_positions is None
-        assert not false_test.potential_matches
+        with self.assertRaisesRegex(ValueError, "unhandled profile"):
+            FDH_SUBGROUPS["trp_5_FDH"].update_match(false_test_residues, false_test, hit)
 
     def test_strong_trp_5(self):
         cds = DummyCDS()
