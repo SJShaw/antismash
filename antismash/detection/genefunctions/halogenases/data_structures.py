@@ -23,15 +23,17 @@ class Match:
     family: str
     confidence: float
     consensus_residues: str
-    substrates: Optional[list[str]] = None
+    substrates: Optional[tuple[str, ...]] = None
     target_positions: Optional[list[int]] = None
-    number_of_decorations: Optional[str] = None
+    number_of_decorations: str = ""
 
     def to_json(self) -> dict[str, Any]:
         return vars(self)
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> "Match":
+        # JSON doesn't have a tuple type, so convert those first
+        data["substrates"] = tuple(data["substrates"])
         return cls(**data)
 
 
@@ -40,9 +42,9 @@ class FlavinDependentHalogenase:
     cds_name: str
     confidence: float = 0
     consensus_residues: Optional[Union[str, dict[str, str]]] = None
-    substrates: Optional[list[str]] = None
+    substrates: Optional[tuple[str, ...]] = None
     target_positions: Optional[list[int]] = None
-    number_of_decorations: Optional[str] = None
+    number_of_decorations: str = ""
     potential_matches: list[Match] = field(default_factory=list)
 
     cofactor: ClassVar[str] = "flavin"
@@ -91,7 +93,7 @@ class FlavinDependentHalogenase:
             self.consensus_residues = best_match.consensus_residues
             self.confidence = best_match.confidence
             self.number_of_decorations = best_match.number_of_decorations
-            self.substrates = best_match.substrates
+            self.substrates = best_match.substrates or tuple()
 
     def to_json(self) -> dict[str, Any]:
         """ Constructs a JSON representation of this instance """
@@ -101,7 +103,7 @@ class FlavinDependentHalogenase:
             "cds_name": self.cds_name,
             "family": self.family,
             "cofactor": self.cofactor,
-            "substrates": self.substrates,
+            "substrates": self.substrates if self.substrates else None,
             "target_positions": self.target_positions,
             "number_of_decorations": self.number_of_decorations,
             "consensus_residues": self.consensus_residues,
@@ -117,7 +119,7 @@ class FlavinDependentHalogenase:
         assert data.pop("family") == cls.family
 
         cds_name = data["cds_name"]
-        substrates = data["substrates"]
+        substrates = tuple(data["substrates"] or [])
         target_positions = data["target_positions"]
         number_of_decorations = data["number_of_decorations"]
         consensus_residues = data["consensus_residues"]
@@ -159,6 +161,8 @@ class MotifDetails:
     name: str
     positions: tuple[int, ...]
     residues: str
+    substrates: tuple[str, ...] = field(default_factory=tuple)
+    decorations: str = ""
 
     def __post_init__(self) -> None:
         assert not self.positions or isinstance(self.positions[0], int)
@@ -176,15 +180,15 @@ class MotifDetails:
         return zip(self.positions, self.residues)
 
     @classmethod
-    def from_dict(cls, name: str, data: dict[int, str]) -> Self:
+    def from_dict(cls, name: str, data: dict[int, str], substrates: tuple[str, ...] = None, decorations: str = "") -> Self:
         positions, residues = zip(*sorted(data.items()))
-        return cls(name=name, positions=positions, residues="".join(residues))
+        return cls(name=name, positions=positions, residues="".join(residues), substrates=substrates or tuple(), decorations=decorations)
 
     @classmethod
-    def from_other(cls, name: str, other: Self, additions: dict[int, str]) -> Self:
+    def from_other(cls, name: str, other: Self, additions: dict[int, str], **kwargs: Any) -> Self:
         base = dict(other)
         base.update(additions)
-        return cls.from_dict(name, base)
+        return cls.from_dict(name, base, **kwargs)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -210,13 +214,16 @@ class Profile:
         if hit.bitscore < self.profile_cutoff:
             return []
 
-        for name, residues in retrieved_residues.items():
-            if residues == self.motifs[name]:
-                matches.append(
-                    Match(hit.query_id, "flavin", "FDH", confidence, residues,
-                          target_positions=self.modification_positions, substrates=[name])
-                )
+        for name, motif in self.motifs.items():
+            if retrieved_residues.get(name) == motif.residues:
+                matches.append(self.create_match(confidence, retrieved_residues[name], motif))
+
         return matches
+
+    def create_match(self, confidence: float, residues: str, motif: MotifDetails) -> Match:
+        return Match(self.profile_name, "flavin", "FDH", confidence, residues,
+                     target_positions=self.modification_positions, substrates=motif.substrates,
+                     number_of_decorations=motif.decorations)
 
     @cached_property
     def motif_names(self) -> list[str]:

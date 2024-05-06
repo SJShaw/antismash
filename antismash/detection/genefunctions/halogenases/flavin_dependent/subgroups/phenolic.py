@@ -5,7 +5,6 @@
 # pylint: disable=use-implicit-booleaness-not-comparison,protected-access,missing-docstring
 
 from dataclasses import dataclass
-from functools import cached_property
 from pathlib import Path
 
 from antismash.common.secmet import CDSFeature
@@ -36,19 +35,14 @@ class TyrosineLikeProfile(Profile):
                 # Hpg will also match Tyr, but is more specific, however
                 # in the future this may need to be adjusted if exact matches aren't required
                 assert retrieved_residues["Tyr"] == self.motifs["Tyr"]
-                matches.append(
-                    Match(hit.query_id, "flavin", "FDH", confidence * modifier, retrieved_residues["Hpg"],
-                          target_positions=self.modification_positions, substrates=["Hpg"])
-                )
+                matches.append(self.create_match(confidence * modifier, retrieved_residues["Hpg"], self.motifs["Hpg"]))
 
             if retrieved_residues.get("Tyr") == self.motifs["Tyr"]:
                 # if any other matches
                 if any(match.confidence > confidence for match in matches):
                     confidence = max(confidence - 0.2, 0.)
-                matches.append(
-                    Match(hit.query_id, "flavin", "FDH", confidence * modifier, retrieved_residues["Tyr"],
-                          target_positions=self.modification_positions, substrates=["Tyr"])
-                )
+                matches.append(self.create_match(confidence * modifier, retrieved_residues["Tyr"], self.motifs["Tyr"]))
+
             if matches:
                 break
         return matches
@@ -58,14 +52,14 @@ TYROSINE_LIKE_MOTIF = MotifDetails.from_dict("Tyr", {
     58: "G", 74: "F", 89: "Q", 92: "R", 99: "L", 107: "G", 149: "D", 150: "A", 152: "G",
     209: "L", 215: "S", 217: "G", 219: "V", 245: "P", 267: "S", 268: "Y", 282: "G",
     284: "A", 289: "D", 290: "P", 293: "S", 295: "G", 305: "L", 331: "Y", 357: "W",
-})
+}, substrates=("Tyr",))
 
 assert TYROSINE_LIKE_MOTIF.residues == "GFQRLGDAGLSGVPSYGADPSGLYW"
 
 # Hpg is a subset of Tyrosine-like, with more specific positions required
 HPG_MOTIF = MotifDetails.from_other("Hpg", TYROSINE_LIKE_MOTIF, {
     66: "S", 158: "H", 196: "C", 200: "G", 246: "M", 259: "Q",
-})
+}, substrates=("Hpg",))
 
 TYR_HPG = TyrosineLikeProfile(
     description="Tyrosine-like substrate halogenase",
@@ -90,7 +84,7 @@ ORSELLINIC = Profile(
             23: "L", 27: "G", 39: "P", 40: "R", 59: "G", 74: "G", 109: "R", 113: "D",
             120: "A", 124: "G", 133: "V", 165: "D", 166: "A", 168: "G", 233: "G", 284: "Y",
             291: "G", 303: "F", 305: "D", 306: "P", 309: "S", 311: "G",
-        }),
+        }, substrates=("cycline_orsellinic-like",)),
     },
     modification_positions=[6, 8],
 )

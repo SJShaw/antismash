@@ -65,7 +65,7 @@ class TestHalongenases(unittest.TestCase):
         assert len(bhaA.potential_matches) == 1
         assert bhaA.potential_matches[0].profile == "tyrosine-like_hpg_FDH"
         assert bhaA.potential_matches[0].confidence == 1.0
-        assert bhaA.potential_matches[0].substrates == ["Tyr"]
+        assert bhaA.potential_matches[0].substrates == ("Tyr",)
 
         chlB4 = results[1]
         assert len(chlB4.potential_matches) == 2

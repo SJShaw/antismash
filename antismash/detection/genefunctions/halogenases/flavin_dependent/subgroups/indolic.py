@@ -37,7 +37,7 @@ class TryptophanProfile(Profile):
                           confidence * modifier, consensus_residues="",
                           target_positions=self.modification_positions,
                           number_of_decorations="mono",
-                          substrates=["tryptophan"])
+                          substrates=("tryptophan",))
             if not check_residues:
                 matches.append(match)
                 break

@@ -11,7 +11,6 @@ from antismash.common.path import get_full_path
 from antismash.detection.genefunctions.halogenases.data_structures import (
     FlavinDependentHalogenase,
     HalogenaseHmmResult,
-    Match,
     MotifDetails,
     Profile,
 )
@@ -25,9 +24,9 @@ PYRROLE = Profile(
     profile_cutoff=400,
     filename=get_full_path(str(Path(__file__).parents[1]), "data", "pyrrole_FDH.hmm"),
     motifs={
-        "mono_di": MotifDetails(name="mono_di", positions=MODIFICATION_COUNT_POSITIONS, residues="DRSVFW"),
-        "unconv_mono_di": MotifDetails(name="unconv_mono_di", positions=MODIFICATION_COUNT_POSITIONS, residues="YRRNFN"),
-        "tetra": MotifDetails(name="tetra_mono_di", positions=MODIFICATION_COUNT_POSITIONS, residues="RRYFFA"),
+        "mono_di": MotifDetails(name="mono_di", positions=MODIFICATION_COUNT_POSITIONS, residues="DRSVFW", decorations="mono_di", substrates=("pyrrole",)),
+        "unconv_mono_di": MotifDetails(name="unconv_mono_di", positions=MODIFICATION_COUNT_POSITIONS, residues="YRRNFN", decorations="unconv_mono_di", substrates=("pyrrole",)),
+        "tetra": MotifDetails(name="tetra_mono_di", positions=MODIFICATION_COUNT_POSITIONS, residues="RRYFFA", decorations="tetra", substrates=("pyrrole",)),
     },
     modification_positions=[5],
 )
@@ -35,38 +34,6 @@ PYRROLE = Profile(
 VARIANTS = [PYRROLE]
 
 SPECIFIC_PROFILES = [variant.profile for variant in VARIANTS]
-
-
-def search_for_match(retrieved_residues: dict[str, str], halogenase: FlavinDependentHalogenase,
-                     hit: HalogenaseHmmResult, cutoff: float, *,
-                     expected_residues: dict[str, str], confidence: float = 1
-                     ) -> bool:
-    """ Looks whether there are hmm hits that meet the requirement for the categorization
-
-        Arguments:
-            retrieved_residues: residues of the protein sequence
-                                in the place of the signature residues
-            halogenase: initiated flavin-dependent halogenase
-            hit: details of the hit (e.g. bitscore, name of the profile, etc.)
-            cutoffs: threshold(s) for the pHMM
-            expected_residues: substrate-specific signature residues
-            confidence: reliability of the categorization
-
-        Returns:
-            if the hit is one of the tryptophan-specific pHMMs,
-            then it adds the match, without returning anything,
-            otherwise, it returns nothing
-    """
-    if hit.bitscore < cutoff:
-        return False
-    for subs, sig_res in expected_residues.items():
-        if retrieved_residues == expected_residues[subs]:
-            halogenase.add_potential_match(Match(hit.query_id, "flavin", "FDH",
-                                                 confidence, sig_res,
-                                                 number_of_decorations=subs,
-                                                 substrates=["pyrrole"]))
-            return True
-    return False
 
 
 def update_match(retrieved_residues: dict[str, str],
@@ -87,10 +54,14 @@ def update_match(retrieved_residues: dict[str, str],
             position, confidence, signature and substrate,
             otherwise, it doesn't return anything and doesn't instanciate anything
     """
-    if hit.hit_id == "pyrrole_FDH":
-        search_for_match(retrieved_residues, halogenase, hit,
-                         cutoff=SPECIFIC_PROFILES[0].cutoff,
-                         expected_residues=PYRROLE.motif_residues)
+    present = False
+    for variant in VARIANTS:
+        if hit.query_id == variant.profile_name:
+            present = True
+            matches = variant.get_matches_from_hit(retrieved_residues, hit)
+            halogenase.add_potential_matches(matches)
+    if not present:
+        raise ValueError(f"unhandled profile: {hit.hit_id}")
 
 
 def get_consensus_signature(cds: CDSFeature, hit: HalogenaseHmmResult
