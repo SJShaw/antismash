@@ -22,7 +22,7 @@ class Match:
     cofactor: str
     family: str
     confidence: float
-    consensus_residues: Union[str, dict[str, str]]
+    consensus_residues: str
     substrates: Optional[list[str]] = None
     target_positions: Optional[list[int]] = None
     number_of_decorations: Optional[str] = None
@@ -161,7 +161,7 @@ class MotifDetails:
     residues: str
 
     def __post_init__(self) -> None:
-        assert isinstance(self.positions[0], int)
+        assert not self.positions or isinstance(self.positions[0], int)
         assert len(list(self.positions)) == len(self.residues)
         assert tuple(sorted(self.positions)) == self.positions
 
@@ -216,7 +216,6 @@ class Profile:
                     Match(hit.query_id, "flavin", "FDH", confidence, residues,
                           target_positions=self.modification_positions, substrates=[name])
                 )
-                print("adding match", matches[-1])
         return matches
 
     @cached_property
@@ -230,3 +229,7 @@ class Profile:
     @cached_property
     def motif_residues(self) -> dict[str, str]:
         return {name: motif.residues for name, motif in self.motifs.items()}
+
+    @cached_property
+    def cutoffs(self) -> tuple[float, ...]:
+        return tuple(sorted([self.profile_cutoff] + self.alternate_cutoffs, reverse=True))

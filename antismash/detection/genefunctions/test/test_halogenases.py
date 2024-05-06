@@ -179,7 +179,7 @@ class PyrrolicBase(unittest.TestCase):
 class IndolicBase(unittest.TestCase):
     def setUp(self):
         self.test_trp_5_match = create_flavin_match("trp_5_FDH", confidence=1, substrates="tryptophan", target_positions=5, number_of_decorations="mono")
-        self.test_trp_6_7_match = create_flavin_match("trp_6_7_FDH", confidence=1, consensus_residues="", substrates="tryptophan", target_positions=6, number_of_decorations="mono")
+        self.test_trp_6_7_match = create_flavin_match("trp_6_7_FDH", confidence=1, substrates="tryptophan", target_positions=6, number_of_decorations="mono")
 
         self.trp_5_hmm_result = HalogenaseHmmResult(
             hit_id="trp_5_FDH",
@@ -558,7 +558,7 @@ class TestIndolic(IndolicBase):
 
     def test_weak_trp_5(self):
         with patch.object(indolic, "get_consensus_signature",
-                          return_value={"trp_5_FDH": indolic.TRP_5_MOTIF.residues}):
+                          return_value={"trp_5_FDH": indolic.TRP_5.motif_residues}):
             low_quality_hit = HalogenaseHmmResult("trp_5_FDH", 380, "trp_5_FDH",
                                                   "foo", "trp_5_FDH")
             categorize_on_substrate_level(DummyCDS(), self.trp_empty_enzyme, [low_quality_hit])
@@ -571,7 +571,7 @@ class TestIndolic(IndolicBase):
 
     def test_trp_6(self):
         with patch.object(indolic, "get_consensus_signature",
-                          return_value={"trp_6_7_FDH": indolic.TRP_6_MOTIF.residues}):
+                          return_value={"trp_6_7_FDH": indolic.TRP_6.motif_residues}):
             categorize_on_substrate_level(DummyCDS(), self.trp_empty_enzyme,
                                           [self.trp_6_7_hmm_result])
         match = self.trp_empty_enzyme.potential_matches[0]
@@ -583,7 +583,7 @@ class TestIndolic(IndolicBase):
 
     def test_trp_7(self):
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
-                          return_value={"trp_6_7_FDH": "VISIL"}):
+                          return_value={"trp_6_7_FDH": indolic.TRP_6.motif_residues}):
             categorize_on_substrate_level(DummyCDS(), self.trp_empty_enzyme, [self.trp_6_7_hmm_result])
         match = self.trp_empty_enzyme.potential_matches[0]
         assert match.profile == "trp_6_7_FDH"
@@ -605,18 +605,23 @@ class TestIndolic(IndolicBase):
             categorize_on_substrate_level(DummyCDS(), FDH("mibH"), [invalid_hit])
 
     @patch.object(indolic, "get_consensus_signature",
-                  return_value={"trp_5_FDH": "VSILIREPGLPRGVPRAVLPGEA"})
-    def test_categorize_on_substrate_level(self, _patched_get_consensus_signature):
+                  return_value={"trp_5_FDH": indolic.TRP_5.motif_residues})
+    def test_categorise_substrate_no_match(self, _patched_get_consensus_signature):
         negative_checked_halogenases = categorize_on_substrate_level(DummyCDS(), self.trp_empty_enzyme, [])
         assert negative_checked_halogenases is None
 
+    @patch.object(indolic, "get_consensus_signature",
+                  return_value={"trp_5_FDH": indolic.TRP_5.motif_residues})
+    def test_categorise_substrate_good_match(self, _patched_consensus_sig):
         cds = DummyCDS(locus_tag="mibH", translation=TRANSLATIONS["mibH"])
         positive_checked_halogenase = categorize_on_substrate_level(cds, FDH("mibH"), [self.trp_5_hmm_result])
         assert isinstance(positive_checked_halogenase, FDH)
         assert positive_checked_halogenase.cds_name == "mibH"
+        for match in positive_checked_halogenase.potential_matches:
+            print(match)
         assert positive_checked_halogenase.potential_matches == [
             create_flavin_match(profile="trp_5_FDH", confidence=1.0,
-                                consensus_residues="VSILIREPGLPRGVPRAVLPGEA",
+                                consensus_residues=indolic.TRP_5_MOTIF.residues,
                                 substrates=["tryptophan"], target_positions=[5],
                                 number_of_decorations="mono")
         ]

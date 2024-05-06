@@ -5,6 +5,7 @@
 # pylint: disable=use-implicit-booleaness-not-comparison,protected-access,missing-docstring
 
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 
 from antismash.common.secmet import CDSFeature
@@ -26,28 +27,26 @@ class TyrosineLikeProfile(Profile):
                              ) -> list[Match]:
         assert set(retrieved_residues).issubset(set(self.motifs))
         matches = []
-        for cutoff in [self.profile_cutoff] + self.alternate_cutoffs:
-            print("here", hit.bitscore, cutoff)
-            score = confidence
+        modifier = 1.
+        for cutoff in self.cutoffs:
             if hit.bitscore < cutoff:
-                score *= 0.5
+                modifier *= 0.5
                 continue
             if retrieved_residues.get("Hpg") == self.motifs["Hpg"]:
                 # Hpg will also match Tyr, but is more specific, however
                 # in the future this may need to be adjusted if exact matches aren't required
                 assert retrieved_residues["Tyr"] == self.motifs["Tyr"]
                 matches.append(
-                    Match(hit.query_id, "flavin", "FDH", score, retrieved_residues["Hpg"],
+                    Match(hit.query_id, "flavin", "FDH", confidence * modifier, retrieved_residues["Hpg"],
                           target_positions=self.modification_positions, substrates=["Hpg"])
                 )
 
             if retrieved_residues.get("Tyr") == self.motifs["Tyr"]:
                 # if any other matches
-                if any(match.confidence > score for match in matches):
-                    score = max(score - 0.2, 0.)
-
+                if any(match.confidence > confidence for match in matches):
+                    confidence = max(confidence - 0.2, 0.)
                 matches.append(
-                    Match(hit.query_id, "flavin", "FDH", score, retrieved_residues["Tyr"],
+                    Match(hit.query_id, "flavin", "FDH", confidence * modifier, retrieved_residues["Tyr"],
                           target_positions=self.modification_positions, substrates=["Tyr"])
                 )
             if matches:
@@ -78,7 +77,7 @@ TYR_HPG = TyrosineLikeProfile(
         "Hpg": HPG_MOTIF,
     },
     modification_positions=[6, 8],
-    alternate_cutoffs=[0., 0.5],
+    alternate_cutoffs=[390.],
 )
 
 ORSELLINIC = Profile(

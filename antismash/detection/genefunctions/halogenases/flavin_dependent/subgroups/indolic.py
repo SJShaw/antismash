@@ -22,26 +22,33 @@ from antismash.detection.genefunctions.halogenases.flavin_dependent import subst
 @dataclass(frozen=True, kw_only=True)
 class TryptophanProfile(Profile):
     def get_matches_from_hit(self, retrieved_residues: dict[str, str], hit: HalogenaseHmmResult,
-                             confidence: float = .1, check_residues: bool = True) -> list[Match]:
-        cutoffs = sorted([self.profile_cutoff] + self.alternate_cutoffs, reverse=True)
+                             confidence: float = 1., check_residues: bool = True) -> list[Match]:
         # if there are no motifs, then any found will break the equality check later
         if not self.motif_residues:
             retrieved_residues = {}
         modifier = 1.
         matches = []
-        for cutoff in cutoffs:
+        for cutoff in self.cutoffs:
             if hit.bitscore < cutoff:
                 modifier = .5
                 continue
 
-            if retrieved_residues != self.motif_residues:
-                continue
-            matches.append(Match(hit.query_id, "flavin", "FDH",
-                                 confidence * modifier, retrieved_residues,
-                                 target_positions=self.modification_positions,
-                                 number_of_decorations="mono",
-                                 substrates=["tryptophan"]))
-        return []
+            match = Match(hit.query_id, "flavin", "FDH",
+                          confidence * modifier, consensus_residues="",
+                          target_positions=self.modification_positions,
+                          number_of_decorations="mono",
+                          substrates=["tryptophan"])
+            if not check_residues:
+                matches.append(match)
+                break
+
+            for name, residues in self.motif_residues.items():
+                if retrieved_residues[name] != residues:
+                    continue
+                match.consensus_residues = residues
+                matches.append(match)
+            break  # lower cutoffs are irrelevant if a higher is satisfied
+        return matches
 
 
 TRP_5_MOTIF = MotifDetails(
@@ -91,45 +98,6 @@ VARIANTS = [TRP_5, TRP_6, TRP_7]
 SPECIFIC_PROFILES = [variant.profile for variant in VARIANTS]
 
 
-def search_for_match(retrieved_residues: str, halogenase: FlavinDependentHalogenase,
-                     hit: HalogenaseHmmResult, position: int,
-                     cutoffs: list[float], *, check_residues: bool = True,
-                     expected_residues: str = "",
-                     confidence: float = 1) -> bool:
-    """ Looks whether there are hmm hits that meet the requirement for the categorization
-
-        Arguments:
-            retrieved_residues: residues of the protein sequence
-            in the place of the signature residues
-            halogenase: initiated flavin-dependent halogenase
-            hit: details of the hit (e.g. bitscore, name of the profile, etc.)
-            position: position of decoration
-            cutoffs: threshold(s) for the pHMM
-            check_residues: should the signature residues be looked at or not
-            expected_residues: substrate-specific signature residues
-            confidence: reliability of the categorization
-
-        Returns:
-            if the hit is one of the tryptophan-specific pHMMs,
-            then it adds the match, without returning anything,
-            otherwise, it returns False
-    """
-    cutoffs.sort(reverse=True)
-    modifier = 1.
-    for cutoff in cutoffs:
-        if hit.bitscore < cutoff:
-            modifier = .5
-            continue
-        if retrieved_residues == expected_residues or not check_residues:
-            halogenase.add_potential_match(Match(hit.query_id, "flavin", "FDH",
-                                                 confidence * modifier, retrieved_residues,
-                                                 target_positions=[position],
-                                                 number_of_decorations="mono",
-                                                 substrates=["tryptophan"]))
-            return True
-    return False
-
-
 def update_match(retrieved_residues: dict[str, str], halogenase: FlavinDependentHalogenase,
                  hit: HalogenaseHmmResult) -> None:
     """ Looks whether there are hmm hits that meet the requirement for the categorization
@@ -148,13 +116,13 @@ def update_match(retrieved_residues: dict[str, str], halogenase: FlavinDependent
             otherwise, it doesn't return anything and doesn't instanciate anything
     """
     matches = []
-    print("indo", retrieved_residues)
     if hit.hit_id == "trp_5_FDH":
         matches = TRP_5.get_matches_from_hit(retrieved_residues, hit)
+        assert len(matches) == 1, matches
     elif hit.hit_id == "trp_6_7_FDH":
         matches = TRP_6.get_matches_from_hit(retrieved_residues, hit)
         if not matches:
-            matches = TRP_7.get_matches_from_hit(retrieved_residues, hit)
+            matches = TRP_7.get_matches_from_hit(retrieved_residues, hit, check_residues=False)
 
     halogenase.add_potential_matches(matches)
 

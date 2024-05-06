@@ -17,13 +17,6 @@ from antismash.detection.genefunctions.halogenases.data_structures import (
 )
 from antismash.detection.genefunctions.halogenases.flavin_dependent import substrate_analysis
 
-TRP_6_MOTIF = MotifDetails(
-    name="Trp_6",
-    positions=(19, 37, 45, 73, 75, 90, 129, 130, 142, 157, 181, 192, 194, 219, 221,
-               225, 227, 237, 287, 306, 337, 339, 350, 353, 356, 411, 462, 505),
-    residues="TEGCAGFDAYHDRFGNADYGLSIIAKIL",
-)
-
 MODIFICATION_COUNT_POSITIONS = (110, 111, 318, 322, 348, 362)
 
 PYRROLE = Profile(
