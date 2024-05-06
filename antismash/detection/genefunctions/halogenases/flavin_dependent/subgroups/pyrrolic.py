@@ -24,9 +24,17 @@ PYRROLE = Profile(
     profile_cutoff=400,
     filename=get_full_path(str(Path(__file__).parents[1]), "data", "pyrrole_FDH.hmm"),
     motifs={
-        "mono_di": MotifDetails(name="mono_di", positions=MODIFICATION_COUNT_POSITIONS, residues="DRSVFW", decorations="mono_di", substrates=("pyrrole",)),
-        "unconv_mono_di": MotifDetails(name="unconv_mono_di", positions=MODIFICATION_COUNT_POSITIONS, residues="YRRNFN", decorations="unconv_mono_di", substrates=("pyrrole",)),
-        "tetra": MotifDetails(name="tetra_mono_di", positions=MODIFICATION_COUNT_POSITIONS, residues="RRYFFA", decorations="tetra", substrates=("pyrrole",)),
+        "mono_di": MotifDetails(name="mono_di", positions=MODIFICATION_COUNT_POSITIONS,
+                                residues="DRSVFW", decorations="mono_di", substrates=("pyrrole",),
+        ),
+        "unconv_mono_di": MotifDetails(
+            name="unconv_mono_di", positions=MODIFICATION_COUNT_POSITIONS, residues="YRRNFN",
+            decorations="unconv_mono_di", substrates=("pyrrole",),
+        ),
+        "tetra": MotifDetails(
+            name="tetra_mono_di", positions=MODIFICATION_COUNT_POSITIONS, residues="RRYFFA",
+            decorations="tetra", substrates=("pyrrole",),
+        ),
     },
     modification_positions=[5],
 )
@@ -83,7 +91,9 @@ def get_consensus_signature(cds: CDSFeature, hit: HalogenaseHmmResult
     signatures = {}
     for variant in VARIANTS:
         if variant.motifs and hit.query_id == variant.profile_name:
-            residues = substrate_analysis.retrieve_fdh_signature_residues(cds.translation, hit, variant.motif_positions, variant.motif_names)
+            residues = substrate_analysis.retrieve_fdh_signature_residues(
+                cds.translation, hit, variant.motif_positions, variant.motif_names,
+            )
             if residues:
                 signatures[variant.profile_name] = residues
     return signatures

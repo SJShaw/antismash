@@ -145,6 +145,7 @@ def get_consensus_signature(cds: CDSFeature, hit: HalogenaseHmmResult
     residues = {}
     for variant in VARIANTS:
         if variant.motifs and hit.query_id == variant.profile_name:
-            residues[variant.profile_name] = substrate_analysis.retrieve_fdh_signature_residues(cds.translation,
-                                                                                                hit, variant.motif_positions, variant.motif_names)
+            residues[variant.profile_name] = substrate_analysis.retrieve_fdh_signature_residues(
+                cds.translation, hit, variant.motif_positions, variant.motif_names,
+            )
     return residues

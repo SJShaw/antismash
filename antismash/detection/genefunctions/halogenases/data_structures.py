@@ -215,7 +215,7 @@ class Profile:
             return []
 
         for name, motif in self.motifs.items():
-            if retrieved_residues.get(name) == motif.residues:
+            if retrieved_residues.get(name) == motif:
                 matches.append(self.create_match(confidence, retrieved_residues[name], motif))
 
         return matches

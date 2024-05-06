@@ -136,8 +136,9 @@ def get_consensus_signature(cds: CDSFeature, hit: HalogenaseHmmResult,
     """
     for variant in VARIANTS:
         if hit.query_id == variant.profile_name:
-            residues = substrate_analysis.retrieve_fdh_signature_residues(cds.translation, hit, variant.motif_positions,
-                                                                          enzyme_substrates=variant.motif_names)
+            residues = substrate_analysis.retrieve_fdh_signature_residues(
+                cds.translation, hit, variant.motif_positions, enzyme_substrates=variant.motif_names,
+            )
             return {hit.query_id: residues}
 
     raise ValueError(f"unhandled profile identifier: {hit.query_id}")

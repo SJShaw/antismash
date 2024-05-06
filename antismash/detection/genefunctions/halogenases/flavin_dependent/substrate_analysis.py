@@ -6,8 +6,7 @@
 
 import re
 from collections import defaultdict
-from dataclasses import dataclass
-from typing import cast, Iterable, Optional, Union
+from typing import Iterable, Optional, Union
 
 from antismash.common.secmet import (
     CDSFeature,
@@ -35,38 +34,20 @@ from antismash.detection.genefunctions.halogenases.flavin_dependent.subgroups im
 )
 
 
-@dataclass
-class SubModule:
-    SPECIFIC_PROFILES: list[HmmSignature]
-
-    @staticmethod
-    def update_match(retrieved_residues: dict[str, str],
-                     halogenase: FlavinDependentHalogenase,
-                     hit: HalogenaseHmmResult,
-                     ) -> None:
-        raise NotImplementedError()
-
-    @staticmethod
-    def get_consensus_signature(cds: CDSFeature, hit: HalogenaseHmmResult,
-                                ) -> dict[str, dict[str, str]]:
-        raise NotImplementedError()
-
-
 # pHMM ids and the submodules they belong to for use in calling submodule-specific functions
-FDH_SUBGROUPS: dict[str, SubModule] = {
-    "trp_5_FDH": cast(SubModule, indolic),
-    "trp_6_7_FDH": cast(SubModule, indolic),
-    "cycline_orsellinic_FDH": cast(SubModule, phenolic),
-    "tyrosine-like_hpg_FDH": cast(SubModule, phenolic),
-    "pyrrole_FDH": cast(SubModule, pyrrolic),
+FDH_SUBGROUPS = {
+    "trp_5_FDH": indolic,
+    "trp_6_7_FDH": indolic,
+    "cycline_orsellinic_FDH": phenolic,
+    "tyrosine-like_hpg_FDH": phenolic,
+    "pyrrole_FDH": pyrrolic,
 }
 
 
 def _get_substrate_specific_profiles() -> list[HmmSignature]:
     """ Collects the substrate-specific pHMM profiles from the substrate-specific submodules"""
     profiles = []
-    submodules: list[SubModule] = list(set(FDH_SUBGROUPS.values()))
-    for submodule in submodules:
+    for submodule in list(set(FDH_SUBGROUPS.values())):
         for profile in submodule.SPECIFIC_PROFILES:
             profiles.append(profile)
     return profiles
@@ -232,8 +213,7 @@ def categorize_on_consensus_level(cds: CDSFeature, specific_hmm_hits: list[Halog
         conserved_motifs = {}
         for hit in general_hmm_hits:
             for motif, positions in substrates.GENERAL_FDH_MOTIFS.items():
-                conserved_motif = search_conserved_motif(cds, positions,
-                                                         hit, motif)
+                conserved_motif = search_conserved_motif(cds, positions, hit, motif)
                 if conserved_motif:
                     conserved_motifs[motif] = conserved_motif
 
@@ -282,6 +262,5 @@ def fdh_specific_analysis(record: Record) -> list[FlavinDependentHalogenase]:
                                                                general_hmm_hits[protein]))
     for enzyme in potential_enzymes:
         enzyme.finalize_enzyme()
-        import logging; logging.critical("%r", enzyme)
 
     return potential_enzymes
