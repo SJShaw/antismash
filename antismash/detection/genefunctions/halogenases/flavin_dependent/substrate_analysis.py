@@ -14,11 +14,11 @@ from antismash.common.secmet import (
 )
 
 from antismash.common import (
-    subprocessing,
     fasta,
+    subprocessing,
     utils,
 )
-
+from antismash.common.subprocessing.hmmpfam import get_alignment_against_profile
 from antismash.detection.genefunctions.halogenases.data_structures import (
     FlavinDependentHalogenase,
     HalogenaseHmmResult,
@@ -90,28 +90,10 @@ def extract_residues(sequence: str, positions: Iterable[int],
         Returns:
             residues that are present in the given positions
     """
-    args = ["-E", str(max_evalue)]
-    results = subprocessing.hmmpfam.run_hmmpfam2(hmm_result.profile,
-                                                 f">query\n{sequence}", extra_args=args)
-    if not (results and results[0].hsps):
+    alignment = get_alignment_against_profile(sequence, hmm_result.profile, hmm_result.query_id)
+    if not alignment:
         return None
-
-    found = False
-    hit = None
-    for hit in results[0].hsps:
-        if hit.hit_id == hmm_result.query_id:
-            found = True
-            break
-
-    if not found:
-        return None
-
-    profile = hit.aln[1].seq
-    query = hit.aln[0].seq
-    offset = hit.hit_start
-    sites = utils.extract_by_reference_positions(query, profile,
-                                                 [p - offset for p in positions if offset < p])
-    return sites
+    return utils.extract_from_alignment(alignment, positions)
 
 
 def search_conserved_motif(cds: CDSFeature, motif_positions: list[int],
@@ -126,22 +108,20 @@ def search_conserved_motif(cds: CDSFeature, motif_positions: list[int],
             motif_pattern: pattern of the motif in regex
 
         Returns:
-            if the conserved motifs are present, then it returns those,
-            if they are not present it returns an empty string
+            the conserved motifs, if present, otherwise an empty string
     """
+    category = ""
 
-    categorized = ""
-    signature_residues = extract_residues(cds.translation,
-                                          motif_positions,
-                                          hmm_result)
+    signature_residues = extract_residues(cds.translation, motif_positions, hmm_result)
+
     if not signature_residues:
-        return categorized
+        return category
 
     motif = re.search(motif_pattern, signature_residues)
-    if motif:
-        return motif[0]
+    if not motif:
+        return category
 
-    return categorized
+    return motif[0]
 
 
 def run_halogenase_phmms(cluster_fasta: str, profiles: list[HmmSignature],
