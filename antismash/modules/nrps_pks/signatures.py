@@ -37,23 +37,9 @@ def get_a_dom_signatures(domain: ModularDomain, max_evalue: float = 0.1) \
     """ Extract 10 / 34 AA NRPS signatures from A domains """
     assert verify_good_sequence(domain.translation)
 
-    args = ["-E", str(max_evalue)]
-    results = subprocessing.hmmpfam.run_hmmpfam2(ADOMAINS_HMM, f">query\n{domain.translation}",
-                                                 extra_args=args)
-    if not (results and results[0].hsps):
-        logging.debug("no hits for query %s, is this a legitimate A-domain?", domain.get_name())
-        return None, None
+    hit = subprocessing.hmmpfam.get_alignment_against_profile(domain.translation, ADOMAINS_HMM, ACTIVE_SITE_PROFILE_NAME)
 
-    found = False
-    hit = None  # will be set in the loop or we abort anyway, just to make pylint happy
-    for hit in results[0].hsps:
-        if hit.hit_id == ACTIVE_SITE_PROFILE_NAME:
-            found = True
-            break
-
-    if not found:
-        logging.debug(
-            "no hits for the active site in %s, is this a legitimate A-domain?", domain.get_name())
+    if not hit:
         return None, None
 
     profile = hit.aln[1].seq
