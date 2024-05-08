@@ -320,11 +320,19 @@ class TestPhenolic(unittest.TestCase):
                           return_value=phenolic.TYR_HPG.motif_residues):
             categorize_on_substrate_level(DummyCDS(translation=TRANSLATIONS["End30"]), self.hpg_enzyme,
                                           [self.hpg_hmm_result])
-        match = self.hpg_enzyme.potential_matches[0]
-        assert match.profile == "tyrosine-like_hpg_FDH"
-        assert match.confidence == 1
-        assert match.substrates == ("Hpg",)
-        assert match.target_positions == [6, 8]
+        assert len(self.hpg_enzyme.potential_matches) == 2
+
+        hpg_match = self.hpg_enzyme.potential_matches[0]
+        assert hpg_match.profile == "tyrosine-like_hpg_FDH"
+        assert hpg_match.confidence == 1.
+        assert hpg_match.substrates == ("Hpg",)
+        assert hpg_match.target_positions == [6, 8]
+
+        tyr_match = self.hpg_enzyme.potential_matches[1]
+        assert tyr_match.profile == "tyrosine-like_hpg_FDH"
+        assert tyr_match.confidence == 0.8
+        assert tyr_match.substrates == ("Tyr",)
+        assert tyr_match.target_positions == [6, 8]
 
     def test_categorising_tyrosine(self):
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",

@@ -31,16 +31,14 @@ class TyrosineLikeProfile(Profile):
             if hit.bitscore < cutoff:
                 modifier *= 0.5
                 continue
-            if retrieved_residues.get("Hpg") == self.motifs["Hpg"]:
-                # Hpg will also match Tyr, but is more specific, however
-                # in the future this may need to be adjusted if exact matches aren't required
+            matches_hpg = retrieved_residues.get("Hpg") == self.motifs["Hpg"]
+            if matches_hpg:
                 assert retrieved_residues["Tyr"] == self.motifs["Tyr"]
                 matches.append(self.create_match(confidence * modifier, retrieved_residues["Hpg"], self.motifs["Hpg"]))
+                # Hpg will also match Tyr, but Hpg is more specific
+                confidence = max(confidence - 0.2, 0.)
 
             if retrieved_residues.get("Tyr") == self.motifs["Tyr"]:
-                # if any other matches
-                if any(match.confidence > confidence for match in matches):
-                    confidence = max(confidence - 0.2, 0.)
                 matches.append(self.create_match(confidence * modifier, retrieved_residues["Tyr"], self.motifs["Tyr"]))
 
             if matches:
