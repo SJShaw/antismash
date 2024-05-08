@@ -44,7 +44,7 @@ class TryptophanProfile(Profile):
                 break
 
             for motif in self.motifs:
-                if retrieved_residues[motif.name] != motif:
+                if retrieved_residues.get(motif.name) != motif:
                     continue
                 match.consensus_residues = motif.residues
                 matches.append(match)

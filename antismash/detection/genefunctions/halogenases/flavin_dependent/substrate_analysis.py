@@ -161,7 +161,7 @@ def categorize_on_substrate_level(cds: CDSFeature, halogenase_match: FlavinDepen
         for subgroup in SUBGROUPS:
             for profile in subgroup.get_matching_profiles(hit):
                 residues = retrieve_fdh_signature_residues(cds.translation, hit, profile.motifs)
-                if residues:
+                if not profile.motifs or residues:
                     subgroup.update_match(residues, halogenase_match, hit)
                     return halogenase_match
 
