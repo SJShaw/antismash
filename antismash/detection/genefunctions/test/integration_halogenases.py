@@ -4,15 +4,10 @@
 # for test files, silence irrelevant and noisy pylint warnings
 # pylint: disable=use-implicit-booleaness-not-comparison,protected-access,missing-docstring
 
-import json
-from tempfile import NamedTemporaryFile
 import unittest
-
-from helperlibs.bio import seqio
 
 import antismash
 from antismash.common import secmet
-from antismash.common.secmet.qualifiers import GeneFunction
 from antismash.common.test import helpers
 from antismash.config import build_config, destroy_config, get_config, update_config
 from antismash.detection.genefunctions import prepare_data
@@ -59,17 +54,18 @@ class TestHalongenases(unittest.TestCase):
         assert dummy_halogenase in record.get_cds_features_within_regions()
         results = halo_analysis(record)
         assert len(results) == 2
-        assert len(results[0].potential_matches) == 1
 
-        bhaA = results[0]
-        assert len(bhaA.potential_matches) == 1
-        assert bhaA.potential_matches[0].profile == "tyrosine-like_hpg_FDH"
-        assert bhaA.potential_matches[0].confidence == 1.0
-        assert bhaA.potential_matches[0].substrates == ("Tyr",)
+        first, second = results
+        assert first.cds_name == "bhaA"
+        assert second.cds_name == "ChlB4"
 
-        chlB4 = results[1]
-        assert len(chlB4.potential_matches) == 2
-        matches = sorted(chlB4.potential_matches, key=lambda x: x.profile)
+        assert len(first.potential_matches) == 1
+        assert first.potential_matches[0].profile == "tyrosine-like_hpg_FDH"
+        assert first.potential_matches[0].confidence == 1.0
+        assert first.potential_matches[0].substrate == "Tyr"
+
+        assert len(second.potential_matches) == 2
+        matches = sorted(second.potential_matches, key=lambda x: x.profile)
         assert matches[0].profile == "cycline_orsellinic_FDH"
         assert matches[0].confidence == 1.0
         assert matches[1].profile == "pyrrole_FDH"

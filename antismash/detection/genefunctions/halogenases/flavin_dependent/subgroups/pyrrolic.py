@@ -6,7 +6,6 @@
 
 from pathlib import Path
 
-from antismash.common.secmet import CDSFeature
 from antismash.common.path import get_full_path
 from antismash.detection.genefunctions.halogenases.data_structures import (
     FlavinDependentHalogenase,
@@ -14,29 +13,29 @@ from antismash.detection.genefunctions.halogenases.data_structures import (
     MotifDetails,
     Profile,
 )
-from antismash.detection.genefunctions.halogenases.flavin_dependent import substrate_analysis
 
 MODIFICATION_COUNT_POSITIONS = (110, 111, 318, 322, 348, 362)
 
 PYRROLE = Profile(
     description="Pyrrole halogenase",
     profile_name="pyrrole_FDH",
-    profile_cutoff=400,
     filename=get_full_path(str(Path(__file__).parents[1]), "data", "pyrrole_FDH.hmm"),
-    motifs={
-        "mono_di": MotifDetails(name="mono_di", positions=MODIFICATION_COUNT_POSITIONS,
-                                residues="DRSVFW", decorations="mono_di", substrates=("pyrrole",),
+    cutoffs=(400,),
+    motifs=(
+        MotifDetails(
+            name="mono_di", positions=MODIFICATION_COUNT_POSITIONS,
+            residues="DRSVFW", decorations="mono_di", substrate="pyrrole",
         ),
-        "unconv_mono_di": MotifDetails(
+        MotifDetails(
             name="unconv_mono_di", positions=MODIFICATION_COUNT_POSITIONS, residues="YRRNFN",
-            decorations="unconv_mono_di", substrates=("pyrrole",),
+            decorations="unconv_mono_di", substrate="pyrrole",
         ),
-        "tetra": MotifDetails(
+        MotifDetails(
             name="tetra_mono_di", positions=MODIFICATION_COUNT_POSITIONS, residues="RRYFFA",
-            decorations="tetra", substrates=("pyrrole",),
+            decorations="tetra", substrate="pyrrole",
         ),
-    },
-    modification_positions=[5],
+    ),
+    modification_positions=(5,),
 )
 
 VARIANTS = [PYRROLE]
@@ -72,28 +71,5 @@ def update_match(retrieved_residues: dict[str, str],
         raise ValueError(f"unhandled profile: {hit.hit_id}")
 
 
-def get_consensus_signature(cds: CDSFeature, hit: HalogenaseHmmResult
-                            ) -> dict[str, dict[str, str]]:
-    """ Retrieves the residues from the substrate-specific,
-        pHMMs that are in the positions of the signature residues
-
-        Arguments:
-            cds: gene/CDS and its properties
-            hit: details of the hit (e.g. bitscore, name of the profile, etc.)
-
-        Returns:
-            if the name of the pHMM doesn't match the substrate-specific one's,
-            it returns an empty dictionary,
-            otherwise, it returns the residues, that are in the same positions as
-            the sugnature residues
-    """
-
-    signatures = {}
-    for variant in VARIANTS:
-        if variant.motifs and hit.query_id == variant.profile_name:
-            residues = substrate_analysis.retrieve_fdh_signature_residues(
-                cds.translation, hit, variant.motif_positions, variant.motif_names,
-            )
-            if residues:
-                signatures[variant.profile_name] = residues
-    return signatures
+def get_matching_profiles(hit: HalogenaseHmmResult) -> list[Profile]:
+    return [variant for variant in VARIANTS if variant.profile_name == hit.query_id]

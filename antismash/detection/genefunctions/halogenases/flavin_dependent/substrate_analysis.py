@@ -6,7 +6,7 @@
 
 import re
 from collections import defaultdict
-from typing import Iterable, Optional, Union
+from typing import Iterable, Optional
 
 from antismash.common.secmet import (
     CDSFeature,
@@ -22,6 +22,7 @@ from antismash.common.subprocessing.hmmpfam import get_alignment_against_profile
 from antismash.detection.genefunctions.halogenases.data_structures import (
     FlavinDependentHalogenase,
     HalogenaseHmmResult,
+    MotifDetails,
 )
 
 from antismash.common.signature import HmmSignature
@@ -33,46 +34,37 @@ from antismash.detection.genefunctions.halogenases.flavin_dependent.subgroups im
     pyrrolic
 )
 
-
-# pHMM ids and the submodules they belong to for use in calling submodule-specific functions
-FDH_SUBGROUPS = {
-    "trp_5_FDH": indolic,
-    "trp_6_7_FDH": indolic,
-    "cycline_orsellinic_FDH": phenolic,
-    "tyrosine-like_hpg_FDH": phenolic,
-    "pyrrole_FDH": pyrrolic,
-}
+SUBGROUPS = [indolic, phenolic, pyrrolic]
 
 
 def _get_substrate_specific_profiles() -> list[HmmSignature]:
     """ Collects the substrate-specific pHMM profiles from the substrate-specific submodules"""
     profiles = []
-    for submodule in list(set(FDH_SUBGROUPS.values())):
+    for submodule in SUBGROUPS:
         for profile in submodule.SPECIFIC_PROFILES:
             profiles.append(profile)
     return profiles
 
 
 def retrieve_fdh_signature_residues(translation: str, hmm_result: HalogenaseHmmResult,
-                                    signatures: Iterable[Iterable[int]],
-                                    enzyme_substrates: Union[list[str], tuple[str, ...]],
-                                    ) -> dict[str, str]:
-    """ Get signature residues for an enzyme from each pHMM
+                            motifs: Iterable[MotifDetails],
+                            ) -> dict[str, str]:
+    """ Extracts residues for each of the given motifs from an HMM hit
 
         Arguments:
             sequence: protein sequence
             hmm_result: instance of HmmResult class,
                         which contains information about the hit in a pHMM
-            signatures: list of the positions that defines the signature residues in a pHMM
+            motifs: the motifs for which to extract signatures
 
         Returns:
             signature residues which were retrieved from a certain pHMM
     """
     signature_residues: dict[str, str] = {}
-    for substrate, signature in zip(enzyme_substrates, signatures):
-        residues = extract_residues(translation, signature, hmm_result)
+    for motif in motifs:
+        residues = extract_residues(translation, motif.positions, hmm_result)
         if residues:
-            signature_residues[substrate] = residues
+            signature_residues[motif.substrate] = residues
     return signature_residues
 
 
@@ -140,8 +132,7 @@ def run_halogenase_phmms(cluster_fasta: str, profiles: list[HmmSignature],
         for runresult in run_results:
             for hsp in runresult.hsps:
                 if hsp.bitscore > sig.cutoff:
-                    hit = HalogenaseHmmResult(hsp.hit_id, hsp.bitscore,
-                                              hsp.query_id, sig.name, sig.path)
+                    hit = HalogenaseHmmResult(hsp.hit_id, hsp.bitscore, hsp.query_id, sig.path)
                     halogenase_hmms_by_id[hsp.hit_id].append(hit)
     return halogenase_hmms_by_id
 
@@ -167,17 +158,14 @@ def categorize_on_substrate_level(cds: CDSFeature, halogenase_match: FlavinDepen
         return None
 
     for hit in hmm_results:
-        if hit.query_id not in FDH_SUBGROUPS:
-            raise ValueError(f"unknown profile identifier: {hit.query_id}")
-        signature_residues = FDH_SUBGROUPS[hit.query_id].get_consensus_signature(cds, hit)
-        specific_signature_residues = signature_residues[hit.query_id]
-        if not specific_signature_residues:
-            return None
-        FDH_SUBGROUPS[hit.query_id].update_match(specific_signature_residues, halogenase_match, hit)
-    if not halogenase_match.potential_matches:
-        return None
+        for subgroup in SUBGROUPS:
+            for profile in subgroup.get_matching_profiles(hit):
+                residues = retrieve_fdh_signature_residues(cds.translation, hit, profile.motifs)
+                if residues:
+                    subgroup.update_match(residues, halogenase_match, hit)
+                    return halogenase_match
 
-    return halogenase_match
+    return None
 
 
 def categorize_on_consensus_level(cds: CDSFeature, specific_hmm_hits: list[HalogenaseHmmResult],

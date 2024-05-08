@@ -5,7 +5,6 @@
 # pylint: disable=use-implicit-booleaness-not-comparison,protected-access,missing-docstring
 
 from dataclasses import dataclass, field
-from functools import cached_property
 from typing import Any, ClassVar, Iterable, Iterator, Optional, Self, Union
 
 from antismash.common.hmmscan_refinement import HMMResult
@@ -23,8 +22,8 @@ class Match:
     family: str
     confidence: float
     consensus_residues: str
-    substrates: Optional[tuple[str, ...]] = None
-    target_positions: Optional[list[int]] = None
+    substrate: Optional[str] = None
+    target_positions: Optional[tuple[int, ...]] = None
     number_of_decorations: str = ""
 
     def to_json(self) -> dict[str, Any]:
@@ -33,7 +32,6 @@ class Match:
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> "Match":
         # JSON doesn't have a tuple type, so convert those first
-        data["substrates"] = tuple(data["substrates"])
         return cls(**data)
 
 
@@ -43,12 +41,12 @@ class FlavinDependentHalogenase:
     confidence: float = 0
     consensus_residues: Optional[Union[str, dict[str, str]]] = None
     substrates: Optional[tuple[str, ...]] = None
-    target_positions: Optional[list[int]] = None
+    target_positions: Optional[tuple[int, ...]] = None
     number_of_decorations: str = ""
     potential_matches: list[Match] = field(default_factory=list)
 
     cofactor: ClassVar[str] = "flavin"
-    family: ClassVar[str] = "FDH"
+    family: ClassVar[str] = "flavin-dependent"
 
     def add_potential_match(self, match: Match) -> None:
         """ Adds the features of an enzyme group"""
@@ -88,12 +86,12 @@ class FlavinDependentHalogenase:
         if len(best_matches) == 1:
             best_match = best_matches[0]
             assert best_match.cofactor == self.cofactor
-            assert best_match.family == self.family
+            assert best_match.family == self.family, f"{best_match.family}, {self.family}"
             self.target_positions = best_match.target_positions
             self.consensus_residues = best_match.consensus_residues
             self.confidence = best_match.confidence
             self.number_of_decorations = best_match.number_of_decorations
-            self.substrates = best_match.substrates or tuple()
+            self.substrates = tuple(match.substrate for match in [best_match] if match.substrate)
 
     def to_json(self) -> dict[str, Any]:
         """ Constructs a JSON representation of this instance """
@@ -143,25 +141,32 @@ class HalogenaseHmmResult(HMMResult):
         evalue: e-value of the hit
         bitscore: bitscore of the hit
         query_id: name of the profile
-        enzyme_type: type of halogenase (e.g. Flavin-dependent, SAM-dependent)
         profile: path to the pHMM file
         internal_hits: any hits contained by this hit
     """
-    def __init__(self, hit_id: str, bitscore: float, query_id: str, enzyme_type: str,
+    def __init__(self, hit_id: str, bitscore: float, query_id: str,
                  profile: str, start: int = 0, end: int = 0, evalue: float = 0.0,
                  internal_hits: Iterable[HMMResult] = None) -> None:
         super().__init__(hit_id, start, end, evalue, bitscore, internal_hits=internal_hits)
         self.query_id = query_id
-        self.enzyme_type = enzyme_type
         self.profile = profile
 
 
 @dataclass(frozen=True, kw_only=True)
 class MotifDetails:
+    """ A class for holding details about a specific motif.
+
+        Attributes:
+            name: the name of the motif
+            positions: the positions of the motif's residues within a reference sequence
+            residues: the residues at each of the provided positions
+            substrates: the substrates to which this motif applies, if any
+            decorations: a description of the decoration type or count for the motif
+    """
     name: str
     positions: tuple[int, ...]
     residues: str
-    substrates: tuple[str, ...] = field(default_factory=tuple)
+    substrate: str = ""
     decorations: str = ""
 
     def __post_init__(self) -> None:
@@ -180,12 +185,34 @@ class MotifDetails:
         return zip(self.positions, self.residues)
 
     @classmethod
-    def from_dict(cls, name: str, data: dict[int, str], substrates: tuple[str, ...] = None, decorations: str = "") -> Self:
+    def from_dict(cls, name: str, data: dict[int, str], **kwargs: Any) -> Self:
+        """ Constructs an instance from a dictionary of position->residue, along
+            with normal keyword arguments.
+
+            Arguments:
+                name: the name for the motif
+                data: a dictionary of position and residue pairs
+                **: any keyword arguments normally supplied when creating a new instance
+
+            Returns:
+                the new instance
+        """
         positions, residues = zip(*sorted(data.items()))
-        return cls(name=name, positions=positions, residues="".join(residues), substrates=substrates or tuple(), decorations=decorations)
+        return cls(name=name, positions=positions, residues="".join(residues), **kwargs)
 
     @classmethod
     def from_other(cls, name: str, other: Self, additions: dict[int, str], **kwargs: Any) -> Self:
+        """ Constructs a new instance from an existing instance, using all of the existing
+            instances positions, with extra additions and replacing other values if specified.
+
+            Arguments:
+                name: the name for the new motif
+                additions: a dictionary of position and residue pairs to insert into the existing set
+                **: any keyword arguments with which to use for the new motif instead of the old values
+
+            Returns:
+                the new instance
+        """
         base = dict(other)
         base.update(additions)
         return cls.from_dict(name, base, **kwargs)
@@ -193,50 +220,105 @@ class MotifDetails:
 
 @dataclass(frozen=True, kw_only=True)
 class Profile:
+    """ A class for holding details about a particular halogenase type.
+
+        Attributes:
+            description: a description of the halogenase type
+            profile_name: the name of the matching pHMM
+            filename: the name of the pHMM file itself
+            cutoffs: a list of bitscore cutoffs ordered by increasing confidence
+            motifs: details for each motif related to the halogenase type
+            modification_positions: the positions at which the halogenase will modify a target
+    """
     description: str
     profile_name: str
-    profile_cutoff: int
     filename: str
+    cutoffs: tuple[int, ...]
 
-    motifs: dict[str, MotifDetails]
-    modification_positions: list[int]
+    motifs: tuple[MotifDetails, ...]
+    modification_positions: tuple[int, ...]
 
-    default_penalty: float = 0.8  # additive, not multiplicative
-    alternate_cutoffs: list[float] = field(default_factory=list)
+    # some pre-cached values, since functools.cached_property ruins some documentation
+    _motif_mapping: dict[str, MotifDetails] = field(repr=False, default_factory=dict)
+    _hmm_profile: Optional[HmmSignature] = None
 
-    @cached_property
+    def __post_init__(self) -> None:
+        # some workarounds for pre-caching derived properties within a frozen dataclass
+        if sorted(self.cutoffs, reverse=True) != self.cutoffs:
+            object.__setattr__(self, "cutoffs", sorted(self.cutoffs, reverse=True))
+
+        object.__setattr__(self, "_hmm_profile",
+                           HmmSignature(self.profile_name, self.description, self.cutoffs[-1], self.filename)
+                           )
+
+        self._motif_mapping.update({motif.name: motif for motif in self.motifs})
+
+        # value checks
+        if len(self._motif_mapping) != len(self.motifs):
+            raise ValueError("Provided motifs are not uniquely named")
+        if not self.cutoffs:
+            raise ValueError("at least one cutoff is required for the HMM profile")
+
+    @property
     def profile(self) -> HmmSignature:
-        return HmmSignature(self.profile_name, self.description, self.profile_cutoff, self.filename)
+        """ The HMM profile for this halogenase type """
+        assert self._hmm_profile is not None
+        return self._hmm_profile
 
-    def get_matches_from_hit(self, retrieved_residues: dict[str, str], hit: HalogenaseHmmResult, confidence: float = 1.) -> list[Match]:
+    def get_matches_from_hit(self, retrieved_residues: dict[str, str], hit: HalogenaseHmmResult,
+                             confidence: float = 1.,
+                             ) -> list[Match]:
+        """ Searches for good motif matches for the halogenase type.
+
+            Arguments:
+                retrieved_residues: a dictionary mapping motif name to residues extracted for that motif
+                hit: the HMMer hit from the halogenase type's profile
+                confidence: a default confidence to use for all matches found
+
+            Returns:
+                a list of matches found
+        """
         matches = []
 
-        if hit.bitscore < self.profile_cutoff:
+        if hit.bitscore < self.cutoffs[-1]:
             return []
 
-        for name, motif in self.motifs.items():
-            if retrieved_residues.get(name) == motif:
-                matches.append(self.create_match(confidence, retrieved_residues[name], motif))
+        for motif in self.motifs:
+            if retrieved_residues.get(motif.name) == motif:
+                matches.append(self.create_match(confidence, retrieved_residues[motif.name], motif))
 
         return matches
 
     def create_match(self, confidence: float, residues: str, motif: MotifDetails) -> Match:
-        return Match(self.profile_name, "flavin", "FDH", confidence, residues,
-                     target_positions=self.modification_positions, substrates=motif.substrates,
+        """ Creates a match instance for the halogenase type.
+
+            Arguments:
+                confidence: the confidence of the match
+                residues: the residues of the match, as extracted for the motif
+                motif: the details of the motif that triggered the match
+
+            Returns:
+                the new match
+        """
+        return Match(self.profile_name, FlavinDependentHalogenase.cofactor, FlavinDependentHalogenase.family, confidence, residues,
+                     target_positions=self.modification_positions, substrate=motif.substrate,
                      number_of_decorations=motif.decorations)
 
-    @cached_property
-    def motif_names(self) -> list[str]:
-        return list(self.motifs)
+    def get_motif_by_name(self, name: str) -> MotifDetails:
+        """ Returns the motif for this halogenase type with the given name """
+        return self._motif_mapping[name]
 
-    @cached_property
+    @property
+    def motif_names(self) -> tuple[str, ...]:
+        """ The names of the motifs within this halogenase type """
+        return tuple(motif.name for motif in self.motifs)
+
+    @property
     def motif_positions(self) -> tuple[tuple[int, ...], ...]:
-        return tuple(motif.positions for motif in self.motifs.values())
+        """ The signature positions of each motif within this halogenase type """
+        return tuple(motif.positions for motif in self.motifs)
 
-    @cached_property
-    def motif_residues(self) -> dict[str, str]:
-        return {name: motif.residues for name, motif in self.motifs.items()}
-
-    @cached_property
-    def cutoffs(self) -> tuple[float, ...]:
-        return tuple(sorted([self.profile_cutoff] + self.alternate_cutoffs, reverse=True))
+    @property
+    def motif_residues(self) -> tuple[str, ...]:
+        """ The residues of each motif within this halogenase type """
+        return tuple(motif.residues for motif in self.motifs)

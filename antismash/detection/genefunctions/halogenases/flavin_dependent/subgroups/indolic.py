@@ -7,7 +7,6 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from antismash.common.secmet import CDSFeature
 from antismash.common.path import get_full_path
 from antismash.detection.genefunctions.halogenases.data_structures import (
     FlavinDependentHalogenase,
@@ -16,7 +15,6 @@ from antismash.detection.genefunctions.halogenases.data_structures import (
     MotifDetails,
     Profile,
 )
-from antismash.detection.genefunctions.halogenases.flavin_dependent import substrate_analysis
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -26,6 +24,7 @@ class TryptophanProfile(Profile):
         # if there are no motifs, then any found will break the equality check later
         if not self.motif_residues:
             retrieved_residues = {}
+        assert isinstance(retrieved_residues, dict)
         modifier = 1.
         matches = []
         for cutoff in self.cutoffs:
@@ -33,19 +32,21 @@ class TryptophanProfile(Profile):
                 modifier = .5
                 continue
 
-            match = Match(hit.query_id, "flavin", "FDH",
-                          confidence * modifier, consensus_residues="",
-                          target_positions=self.modification_positions,
-                          number_of_decorations="mono",
-                          substrates=("tryptophan",))
+            match = Match(
+                hit.query_id, FlavinDependentHalogenase.cofactor, FlavinDependentHalogenase.family,
+                confidence * modifier, consensus_residues="",
+                target_positions=self.modification_positions,
+                number_of_decorations="mono",
+                substrate="tryptophan",
+            )
             if not check_residues:
                 matches.append(match)
                 break
 
-            for name, residues in self.motif_residues.items():
-                if retrieved_residues[name] != residues:
+            for motif in self.motifs:
+                if retrieved_residues[motif.name] != motif:
                     continue
-                match.consensus_residues = residues
+                match.consensus_residues = motif.residues
                 matches.append(match)
             break  # lower cutoffs are irrelevant if a higher is satisfied
         return matches
@@ -68,29 +69,28 @@ TRP_6_MOTIF = MotifDetails(
 TRP_5 = TryptophanProfile(
     description="Tryptophan-5 halogenase",
     profile_name="trp_5_FDH",
-    profile_cutoff=350,
-    alternate_cutoffs=[850],
+    cutoffs=(850, 350),
     filename=get_full_path(str(Path(__file__).parents[1]), "data", "trp_5_FDH.hmm"),
-    motifs={"trp_5_FDH": TRP_5_MOTIF},
-    modification_positions=[5],
+    motifs=(TRP_5_MOTIF,),
+    modification_positions=(5,),
 )
 
 TRP_6 = TryptophanProfile(
     description="Tryptophan-6 or -7 halogenase",
     profile_name="trp_6_7_FDH",
-    profile_cutoff=770,
+    cutoffs=(770,),
     filename=get_full_path(str(Path(__file__).parents[1]), "data", "trp_6_7_FDH.hmm"),
-    motifs={"trp_6_7_FDH": TRP_6_MOTIF},
-    modification_positions=[6],
+    motifs=(TRP_6_MOTIF,),
+    modification_positions=(6,),
 )
 
 TRP_7 = TryptophanProfile(
     description="Tryptophan-6 or -7 halogenase",
     profile_name="trp_6_7_FDH",
-    profile_cutoff=770,
+    cutoffs=(770,),
     filename=get_full_path(str(Path(__file__).parents[1]), "data", "trp_6_7_FDH.hmm"),
-    motifs={},
-    modification_positions=[7],
+    motifs=tuple(),
+    modification_positions=(7,),
 )
 
 VARIANTS = [TRP_5, TRP_6, TRP_7]
@@ -128,25 +128,5 @@ def update_match(retrieved_residues: dict[str, str], halogenase: FlavinDependent
     halogenase.add_potential_matches(matches)
 
 
-def get_consensus_signature(cds: CDSFeature, hit: HalogenaseHmmResult
-                            ) -> dict[str, dict[str, str]]:
-    """ Retrieves the residues from the substrate-specific,
-        pHMMs that are in the positions of the signature residues
-
-        Arguments:
-            cds: gene/CDS and its properties
-            hit: details of the hit (e.g. bitscore, name of the profile, etc.)
-
-        Returns:
-            if the name of the pHMM doesn't match the substrate-specific one's,
-            it returns an empty dictionary,
-            otherwise, it returns the residues, that are in the same positions as
-            the signature residues
-    """
-    residues = {}
-    for variant in VARIANTS:
-        if variant.motifs and hit.query_id == variant.profile_name:
-            residues[variant.profile_name] = substrate_analysis.retrieve_fdh_signature_residues(
-                cds.translation, hit, variant.motif_positions, variant.motif_names,
-            )
-    return residues
+def get_matching_profiles(hit: HalogenaseHmmResult) -> list[Profile]:
+    return [variant for variant in VARIANTS if variant.profile_name == hit.query_id]
