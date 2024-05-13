@@ -27,11 +27,14 @@ class Match:
     number_of_decorations: str = ""
 
     def to_json(self) -> dict[str, Any]:
-        return vars(self)
+        data = dict(vars(self))
+        data["target_positions"] = list(data["target_positions"])
+        return data
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> "Match":
         # JSON doesn't have a tuple type, so convert those first
+        data["target_positions"] = tuple(data["target_positions"])
         return cls(**data)
 
 
