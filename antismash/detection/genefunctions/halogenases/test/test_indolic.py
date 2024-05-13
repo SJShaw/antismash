@@ -230,7 +230,6 @@ class TestSpecificAnalysis(IndolicBase):
                                              FDH(name), [],
                                              fdh_specific_analysis)
         assert len(result) == 1
-        assert result[0].substrates is None
         assert not result[0].consensus_residues
         assert not result[0].potential_matches
 
@@ -244,8 +243,6 @@ class TestSpecificAnalysis(IndolicBase):
                                              FDH(name), [],
                                              fdh_specific_analysis)
         assert len(result) == 1
-        assert not result[0].substrates
-        assert not result[0].target_positions
 
     @patch.object(substrate_analysis, "extract_residues",
                   return_value="WIWVIRYGMIGDAASVIDAYYSQGVSLALVT")
@@ -256,8 +253,7 @@ class TestSpecificAnalysis(IndolicBase):
             {},
             [HalogenaseHmmResult(name, 200, "all_conventional_FDH", "flavin-dependent")],
         )
-        assert result.consensus_residues == {"W.W.I.": "WIWVIR"}
-        assert result.substrates is None
+        assert result.consensus_residues == {"W.W.I.": "WIWVIR"}  # is this regex intended to be "starts with"?
         assert not result.potential_matches
 
     @patch.object(substrate_analysis, "extract_residues",

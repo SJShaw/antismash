@@ -5,7 +5,7 @@
 # pylint: disable=use-implicit-booleaness-not-comparison,protected-access,missing-docstring
 
 from dataclasses import dataclass, field
-from typing import Any, ClassVar, Iterable, Iterator, Optional, Self, Union
+from typing import Any, ClassVar, Iterable, Iterator, Optional, Self
 
 from antismash.common.hmmscan_refinement import HMMResult
 from antismash.common.signature import HmmSignature
@@ -41,15 +41,16 @@ class Match:
 @dataclass
 class FlavinDependentHalogenase:
     cds_name: str
-    confidence: float = 0
-    consensus_residues: Optional[Union[str, dict[str, str]]] = None
-    substrates: Optional[tuple[str, ...]] = None
-    target_positions: Optional[tuple[int, ...]] = None
-    number_of_decorations: str = ""
     potential_matches: list[Match] = field(default_factory=list)
 
     cofactor: ClassVar[str] = "flavin"
     family: ClassVar[str] = "flavin-dependent"
+
+    @property
+    def confidence(self) -> float:
+        if not self.potential_matches:
+            return 0.
+        return max(match.confidence for match in self.potential_matches)
 
     def add_potential_matches(self, matches: Iterable[Match]) -> None:
         self.potential_matches.extend(matches)
@@ -80,11 +81,6 @@ class FlavinDependentHalogenase:
             "cds_name": self.cds_name,
             "family": self.family,
             "cofactor": self.cofactor,
-            "substrates": self.substrates if self.substrates else None,
-            "target_positions": self.target_positions,
-            "number_of_decorations": self.number_of_decorations,
-            "consensus_residues": self.consensus_residues,
-            "confidence": self.confidence,
             "potential_matches": potential_matches_json
         }
 
@@ -96,16 +92,8 @@ class FlavinDependentHalogenase:
         assert data.pop("family") == cls.family
 
         cds_name = data["cds_name"]
-        substrates = tuple(data["substrates"] or [])
-        target_positions = data["target_positions"]
-        number_of_decorations = data["number_of_decorations"]
-        consensus_residues = data["consensus_residues"]
-        confidence = data["confidence"]
         potential_matches = [Match.from_json(profile) for profile in data["potential_matches"]]
-        enzyme = cls(cds_name, confidence,
-                     consensus_residues, substrates, target_positions,
-                     number_of_decorations, potential_matches)
-        return enzyme
+        return cls(cds_name, potential_matches)
 
     def __repr__(self) -> str:
         return f"FlavinDependentHalogenase({self.cds_name=}, {self.confidence=}, {self.potential_matches=})"
