@@ -161,16 +161,17 @@ def categorize_on_substrate_level(cds: CDSFeature, halogenase_match: FlavinDepen
     if not hmm_results:
         return None
 
+    matched = False
+
     for hit in hmm_results:
         for subgroup in SUBGROUPS:
             for profile in subgroup.get_matching_profiles(hit):
                 residues = retrieve_fdh_signature_residues(cds.translation, hit, profile.motifs)
-                print(profile, residues)
                 if not profile.motifs or residues:
                     subgroup.update_match(residues, halogenase_match, hit)
-                    return halogenase_match
+                    matched = True
 
-    return None
+    return halogenase_match if matched else None
 
 
 def categorize_on_consensus_level(cds: CDSFeature, specific_hmm_hits: list[HalogenaseHmmResult],
