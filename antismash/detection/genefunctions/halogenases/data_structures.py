@@ -164,7 +164,7 @@ class MotifDetails:
             decorations: a description of the decoration type or count for the motif
     """
     name: str
-    positions: tuple[int, ...]
+    positions: tuple[int, ...] = field(repr=False)
     residues: str
     substrate: str = ""
     decorations: str = ""
@@ -232,7 +232,7 @@ class Profile:
     """
     description: str
     profile_name: str
-    filename: str
+    filename: str = field(repr=False)
     cutoffs: tuple[int, ...]
 
     motifs: tuple[MotifDetails, ...]
@@ -240,7 +240,7 @@ class Profile:
 
     # some pre-cached values, since functools.cached_property ruins some documentation
     _motif_mapping: dict[str, MotifDetails] = field(repr=False, default_factory=dict)
-    _hmm_profile: Optional[HmmSignature] = None
+    _hmm_profile: Optional[HmmSignature] = field(repr=False, default=None)
 
     def __post_init__(self) -> None:
         # some workarounds for pre-caching derived properties within a frozen dataclass
