@@ -23,9 +23,6 @@ from antismash.detection.genefunctions.halogenases.flavin_dependent.subgroups im
     pyrrolic,
 )
 
-TRANSLATIONS = fasta.read_fasta(path.get_full_path(__file__, "data", "translations.fasta"))
-TRANSLATIONS = {key.rsplit("|", 1)[-1]: value for key, value in TRANSLATIONS.items()}
-
 
 class TestPyrrolic(unittest.TestCase):
     def setUp(self):

@@ -5,12 +5,11 @@
 # pylint: disable=use-implicit-booleaness-not-comparison,protected-access,missing-docstring
 
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from antismash.common import fasta, path, subprocessing
 from antismash.common.test.helpers import (
     DummyCDS,
-    DummyFeature,
     FakeHSPHit,
     FakeHit,
 )
@@ -38,113 +37,101 @@ def create_motif_residue_mapping(profile):
 
 class TestPhenolic(unittest.TestCase):
     def setUp(self):
-        self.tyrosine_hmm_result = HalogenaseHmmResult(
-            hit_id="tyrosine-like_hpg_FDH",
-            bitscore=1000,
-            query_id="tyrosine-like_hpg_FDH",
-            profile=phenolic.SPECIFIC_PROFILES[0].path,
-        )
-        self.less_confident_tyrosine_hmm_result = HalogenaseHmmResult(
-            hit_id="tyrosine-like_hpg_FDH",
-            bitscore=310,
-            query_id="tyrosine-like_hpg_FDH",
-            profile=phenolic.SPECIFIC_PROFILES[0].path
-        )
         self.hpg_hmm_result = HalogenaseHmmResult(
-            hit_id="tyrosine-like_hpg_FDH",
+            hit_id="query_name",
             bitscore=600,
             query_id="tyrosine-like_hpg_FDH",
             profile=phenolic.SPECIFIC_PROFILES[0].path,
         )
         self.cycline_orsellinic_hmm_result = HalogenaseHmmResult(
-            hit_id="cycline_orsellinic_FDH",
+            hit_id="query_name",
             bitscore=600,
             query_id="cycline_orsellinic_FDH",
             profile=phenolic.SPECIFIC_PROFILES[1].path,
         )
 
-        # tyrosine
-        self.tyr_enzyme = FDH("BhaA")
-
-        # Hpg
-        self.hpg_enzyme = FDH("End30")
-
-        # other phenolic-substrate halogenase (orsellinic-like)
-        self.orsellinic_with_no_matches = FDH("ChlB4")
-
-        self.tyrosine_match_not_hpg = {
-            "Tyr": "GFQRLGDAGLSGVPSYGADPSGLYW",
-            "Hpg": "VALAMI",
-        }
-
     def test_categorising_orsellinic(self):
+        fdh = FDH("")
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
                           return_value=create_motif_residue_mapping(phenolic.ORSELLINIC)):
-            categorize_on_substrate_level(DummyCDS(), self.orsellinic_with_no_matches,
-                                          [self.cycline_orsellinic_hmm_result])
-        match = self.orsellinic_with_no_matches.potential_matches[0]
+            categorize_on_substrate_level(DummyCDS(), fdh, [self.cycline_orsellinic_hmm_result])
+        assert len(fdh.potential_matches) == 1
+        match = fdh.potential_matches[0]
         assert match.profile == "cycline_orsellinic_FDH"
         assert match.confidence == 1
         assert match.substrate == "cycline_orsellinic-like"
         assert match.target_positions == (6, 8)
 
-    def test_categorising_hpg(self):
+    def test_no_result(self):
+        fdh = FDH("")
         with patch.object(substrate_analysis, "extract_residues",
                           return_value=""):
-            assert not categorize_on_substrate_level(DummyCDS(), self.orsellinic_with_no_matches,
-                                                     [self.cycline_orsellinic_hmm_result])
+            result = categorize_on_substrate_level(DummyCDS(), fdh, [self.cycline_orsellinic_hmm_result])
+        assert result is None
 
-        # Tyr and Hpg halogenases
+    def test_both_tyr_and_hpg(self):
+        fdh = FDH("")
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
                           return_value=create_motif_residue_mapping(phenolic.TYR_HPG)):
-            categorize_on_substrate_level(DummyCDS(translation=TRANSLATIONS["End30"]), self.hpg_enzyme,
-                                          [self.hpg_hmm_result])
-        assert len(self.hpg_enzyme.potential_matches) == 2
+            categorize_on_substrate_level(DummyCDS(), fdh, [self.hpg_hmm_result])
 
-        hpg_match = self.hpg_enzyme.potential_matches[0]
+        hpg_match, tyr_match = fdh.potential_matches
+
         assert hpg_match.profile == "tyrosine-like_hpg_FDH"
         assert hpg_match.confidence == 1.
         assert hpg_match.substrate == "Hpg"
         assert hpg_match.target_positions == (6, 8)
 
-        tyr_match = self.hpg_enzyme.potential_matches[1]
         assert tyr_match.profile == "tyrosine-like_hpg_FDH"
         assert tyr_match.confidence == 0.8
         assert tyr_match.substrate == "Tyr"
         assert tyr_match.target_positions == (6, 8)
 
-    def test_categorising_tyrosine(self):
+    def test_weak_hit_good_motif(self):
+        hit = HalogenaseHmmResult(
+            hit_id="query",
+            bitscore=310,  # weak score
+            query_id="tyrosine-like_hpg_FDH",
+            profile="dummy_path",
+        )
+        fdh = FDH("")
+        motifs_tyrosine_match_not_hpg = {
+            "Tyr": "GFQRLGDAGLSGVPSYGADPSGLYW",
+            "Hpg": "VALAMI",
+        }
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
-                          return_value=self.tyrosine_match_not_hpg):
-            assert categorize_on_substrate_level(DummyCDS(translation=TRANSLATIONS["BhaA"]), self.tyr_enzyme,
-                                                 [self.less_confident_tyrosine_hmm_result])
-        match = self.tyr_enzyme.potential_matches[0]
+                          return_value=motifs_tyrosine_match_not_hpg):
+            assert categorize_on_substrate_level(DummyCDS(), fdh, [hit])
+        assert len(fdh.potential_matches) == 1
+        match = fdh.potential_matches[0]
         assert match.profile == "tyrosine-like_hpg_FDH"
         assert match.confidence == 0.5
         assert match.substrate == "Tyr"
         assert match.target_positions == (6, 8)
 
+    def test_good_hit_bad_motif(self):
+        hit = HalogenaseHmmResult(
+            hit_id="tyrosine-like_hpg_FDH",
+            bitscore=1000,
+            query_id="tyrosine-like_hpg_FDH",
+            profile=phenolic.SPECIFIC_PROFILES[0].path,
+        )
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
                           return_value={}):
-            assert categorize_on_substrate_level(DummyCDS(), self.tyr_enzyme,
-                                                 [self.tyrosine_hmm_result]) is None
+            result = categorize_on_substrate_level(DummyCDS(), FDH(""), [hit])
+        assert result is None
 
     def test_retrieve_fdh_signature_residues(self):
-        with patch.object(subprocessing.hmmpfam, "run_hmmpfam2") as run_hmmpfam2:
-            run_hmmpfam2.return_value = [FakeHit(1, 2, 1000, "foo")]
-            # checking if hit_id != query_id it breaks
-            for result in run_hmmpfam2.return_value:
-                result.hsps = [FakeHSPHit("BhaA", hit_id="tyrosine-like_hpg_FDH")]
-                for hit in result.hsps:
-                    hit_query = DummyFeature()
-                    hit_profile = DummyFeature()
-                    hit_query.seq = TRANSLATIONS["BhaA"]
-                    hit_profile.seq = TRANSLATIONS["BhaA"]
-                    hit.aln = [hit_profile, hit_query]
-            cds = DummyCDS(locus_tag="BhaA", translation=TRANSLATIONS["BhaA"])
-            assert " " not in cds.translation
+        alignment = FakeHSPHit("dummy", hit_id="tyrosine-like_hpg_FDH")
+        alignment.aln = [Mock(seq=TRANSLATIONS["BhaA"]), Mock(seq=TRANSLATIONS["BhaA"])]
+        hit = FakeHit(1, 2, 1000, "foo")
+        hit.hsps = [alignment]
+
+        with patch.object(subprocessing.hmmpfam, "run_hmmpfam2", return_value=[hit]):
             residues = substrate_analysis.retrieve_fdh_signature_residues(
-                cds.translation, self.hpg_hmm_result, [phenolic.TYROSINE_LIKE_MOTIF, phenolic.HPG_MOTIF],
+                "MAGIC", self.hpg_hmm_result, [phenolic.TYROSINE_LIKE_MOTIF, phenolic.HPG_MOTIF],
             )
-        assert isinstance(residues, dict)
-        assert residues["Tyr"] is not None and residues["Hpg"] is not None
+        assert residues == {
+            "Tyr": "MRFGGVTDDNFSWQADVKQQYRANV",
+            "Hpg": "MARFGGVTDDVFKNFSWQGCADVKQQYRANV",
+        }

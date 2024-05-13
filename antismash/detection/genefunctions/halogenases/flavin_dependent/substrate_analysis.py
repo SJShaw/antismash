@@ -47,8 +47,8 @@ def _get_substrate_specific_profiles() -> list[HmmSignature]:
 
 
 def retrieve_fdh_signature_residues(translation: str, hmm_result: HalogenaseHmmResult,
-                            motifs: Iterable[MotifDetails],
-                            ) -> dict[str, str]:
+                                    motifs: Iterable[MotifDetails],
+                                    ) -> dict[str, str]:
     """ Extracts residues for each of the given motifs from an HMM hit
 
         Arguments:
@@ -86,7 +86,8 @@ def extract_residues(sequence: str, positions: Iterable[int],
     """
     if not positions:
         raise ValueError("cannot extract residues without positions")
-    alignment = get_alignment_against_profile(sequence, hmm_result.profile, hmm_result.query_id)
+    alignment = get_alignment_against_profile(sequence, hmm_result.profile,
+                                              hmm_result.query_id, max_evalue=max_evalue)
     if not alignment:
         return None
     return utils.extract_from_alignment(alignment, positions)
@@ -235,7 +236,5 @@ def fdh_specific_analysis(record: Record) -> list[FlavinDependentHalogenase]:
         cds = record.get_cds_by_name(protein)
         potential_enzymes.append(categorize_on_consensus_level(cds, specific_hmm_hits[protein],
                                                                general_hmm_hits[protein]))
-    for enzyme in potential_enzymes:
-        enzyme.finalize_enzyme()
 
     return potential_enzymes

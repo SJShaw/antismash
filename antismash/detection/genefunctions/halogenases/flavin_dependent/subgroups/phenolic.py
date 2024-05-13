@@ -107,10 +107,14 @@ def update_match(retrieved_residues: dict[str, str],
             position, confidence, signature and substrate,
             otherwise, it doesn't return anything and doesn't instanciate anything
     """
+    present = False
     for variant in VARIANTS:
-        if variant.profile_name == hit.query_id:
+        if hit.query_id == variant.profile_name:
+            present = True
             matches = variant.get_matches_from_hit(retrieved_residues, hit)
             halogenase.add_potential_matches(matches)
+    if not present:
+        raise ValueError(f"unhandled profile: {hit.query_id}")
 
 
 def get_matching_profiles(hit: HalogenaseHmmResult) -> list[Profile]:

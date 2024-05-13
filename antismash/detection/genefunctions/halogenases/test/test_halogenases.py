@@ -4,14 +4,6 @@
 # for test files, silence irrelevant and noisy pylint warnings
 # pylint: disable=use-implicit-booleaness-not-comparison,protected-access,missing-docstring
 
-""" KtzQ: Trp-7
-    KtzR: Trp-6
-    mibH: Trp-5
-    ChlB4: Orsellinic-like
-    End30: Hpg
-    BhaA: Tyrosine
-"""
-
 import json
 import unittest
 from unittest.mock import patch
@@ -20,37 +12,20 @@ from antismash.common import (
     fasta,
     path,
     subprocessing,
-    utils,
 )
-from antismash.common.secmet.test.helpers import (
-    DummyFeature,
-    DummyCDS,
-)
+from antismash.common.secmet.test.helpers import DummyCDS
 from antismash.common.signature import HmmSignature
 from antismash.common.test.helpers import FakeHSPHit, FakeHit
-from antismash.detection.genefunctions.halogenases.flavin_dependent.subgroups import (
-    indolic,
-)
-
 from antismash.detection.genefunctions.halogenases import (
     HalogenaseHmmResult,
     FlavinDependentHalogenase as FDH,
     Match,
 )
-
 from antismash.detection.genefunctions.halogenases.flavin_dependent import substrate_analysis
 from antismash.detection.genefunctions.halogenases.flavin_dependent.substrate_analysis import (
     run_halogenase_phmms,
-    extract_residues,
     categorize_on_substrate_level,
 )
-
-TRANSLATIONS = fasta.read_fasta(path.get_full_path(__file__, "data", "translations.fasta"))
-TRANSLATIONS = {key.rsplit("|", 1)[-1]: value for key, value in TRANSLATIONS.items()}
-
-
-def create_motif_residue_mapping(profile):
-    return {motif.name: motif.residues for motif in profile.motifs}
 
 
 def test_categorisation_with_no_hits():
@@ -96,13 +71,13 @@ def test_conversion_methods():
 def test_run_halogenase_phmms(_patched):
     signature = HmmSignature("foo", "description", 300, "dummy_path")
     for value in _patched.return_value:
-        value.hsps = [FakeHSPHit("foo", "foo", bitscore=250)]
+        value.hsps = [FakeHSPHit("foo", "query", bitscore=250)]
 
     negative_test_halogenase_hmms_by_id = run_halogenase_phmms("", [signature])
     assert not negative_test_halogenase_hmms_by_id
 
     for value in _patched.return_value:
-        value.hsps = [FakeHSPHit("foo", "foo", bitscore=1000)]
+        value.hsps = [FakeHSPHit("foo", "query", bitscore=1000)]
 
     positive_test_halogenase_hmms_by_id = run_halogenase_phmms("", [signature])
     assert positive_test_halogenase_hmms_by_id
@@ -150,51 +125,3 @@ class TestGetBest(unittest.TestCase):
         matches = [self.low_confidence_match]
         best = FDH("test_enzyme", potential_matches=matches).get_best_matches()
         assert best == matches
-
-
-def test_search_signature_residues():
-    target_positions = indolic.TRP_6_MOTIF.positions
-    profile = indolic.TRP_6
-
-    hmm_result = HalogenaseHmmResult(
-        hit_id="query",
-        bitscore=1000,
-        query_id=profile.profile_name,
-        profile="dummy_path",
-    )
-
-    with patch.object(subprocessing.hmmpfam, "run_hmmpfam2") as run_hmmpfam2:
-        run_hmmpfam2.return_value = []
-        signature_residues = extract_residues(TRANSLATIONS["ktzR"],
-                                              target_positions, hmm_result)
-        assert signature_residues is None
-
-        run_hmmpfam2.return_value = [FakeHit(1, 2, 1000, "foo")]
-        # checking if hit_id != query_id it breaks
-        for result in run_hmmpfam2.return_value:
-            result.hsps = [FakeHSPHit("foo", hit_id="foo")]
-            for hit in result.hsps:
-                hit_query = DummyFeature()
-                hit_profile = DummyFeature()
-                hit_query.seq = "ghjvghjkbln"
-                hit_profile.seq = "xfdhcgkbjlnkml"
-                hit.aln = [hit_profile, hit_query]
-
-        signature_residues = extract_residues(list(TRANSLATIONS.values())[0],
-                                              target_positions, hmm_result)
-        assert signature_residues is None
-
-        # checking if hit_id == query_id it runs til the reference target_positions extraction
-        for result in run_hmmpfam2.return_value:
-            result.hsps = [FakeHSPHit("trp_6_7_FDH", hit_id="trp_6_7_FDH")]
-            for hit in result.hsps:
-                hit_query = DummyFeature()
-                hit_profile = DummyFeature()
-                hit_query.seq = TRANSLATIONS["ktzR"]
-                hit_profile.seq = "xfdhcgkbjlnkml"
-                hit.aln = [hit_profile, hit_query]
-
-        with patch.object(utils, "extract_by_reference_positions", return_value="dummy") as patched:
-            signature_residues = extract_residues(TRANSLATIONS["ktzR"], target_positions, hmm_result)
-            assert signature_residues == "dummy"
-            patched.assert_called_once_with("xfdhcgkbjlnkml", TRANSLATIONS["ktzR"], list(target_positions))

@@ -7,23 +7,15 @@
 import unittest
 
 import antismash
-from antismash.common import secmet
+from antismash.common import fasta, path, secmet
 from antismash.common.test import helpers
 from antismash.config import build_config, destroy_config, get_config, update_config
 from antismash.detection.genefunctions import prepare_data
 from antismash.detection.genefunctions.halogenases import specific_analysis as halo_analysis
 
 # this particular one is ChlB4 from... TODO?
-CHLB4 = """
-MQPDFDAAIVGGGPAGSAMASYLAEAGLSVAVFESEMFPRPHIGESLVPATMPVLDEIGV
-MPDIEAAGFPKKYGAAWTSAESRDVPHNGFTGLDHDFKAAEVMFVERDQPGVHRDYTFHV
-DRGKFDLILLKHAESRGAQVFQKTRVLKADFDTDPDLVTLNCRLGPRTLDFTTRMVIDAS
-GRQTMLGNQLKVKVPDPVFNQYAIHAWFEGLDRTAMALDPAKRDYIYVHFLPLEDTWMWQ
-IPITDTITSVGVVTQKHRFKAASADREKFFWDIVSSRKDIYDALQKAERIRPFKAEGDYS
-YAMRQICGDRFLLIGDAARFVDPIFSSGVSVALNSARLAAKDVIAAHRAGDFRKESFATY
-EEKLRRAVRNWYEFISVYYRLNILFTAFVQDPRYRIDVLKMLQGDFYDGEEPKALKAMRD
-LVTKVENDPEHLWHPYLGTLRAPSAAPTF
-""".replace("\n", "")
+TRANSLATIONS = fasta.read_fasta(path.get_full_path(__file__, "data", "translations.fasta"))
+TRANSLATIONS = {key.rsplit("|", 1)[-1]: value for key, value in TRANSLATIONS.items()}
 
 
 class TestHalongenases(unittest.TestCase):
@@ -46,8 +38,8 @@ class TestHalongenases(unittest.TestCase):
         # the real halogenase had best be present
         assert record.get_cds_by_name("bhaA")
         # and add a dummy second one, just to be sure multiple in a record will function correctly
-        dummy_loc = secmet.locations.FeatureLocation(10, 10 + len(CHLB4) * 3, 1)
-        dummy_halogenase = secmet.CDSFeature(dummy_loc, locus_tag="ChlB4", translation=CHLB4)
+        dummy_loc = secmet.locations.FeatureLocation(10, 10 + len(TRANSLATIONS["ChlB4"]) * 3, 1)
+        dummy_halogenase = secmet.CDSFeature(dummy_loc, locus_tag="ChlB4", translation=TRANSLATIONS["ChlB4"])
         record.add_cds_feature(dummy_halogenase)
         record.add_subregion(secmet.SubRegion(secmet.locations.FeatureLocation(0, len(record)), tool="dummy"))
         record.create_regions()

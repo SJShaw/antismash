@@ -51,10 +51,6 @@ class FlavinDependentHalogenase:
     cofactor: ClassVar[str] = "flavin"
     family: ClassVar[str] = "flavin-dependent"
 
-    def add_potential_match(self, match: Match) -> None:
-        """ Adds the features of an enzyme group"""
-        self.potential_matches.append(match)
-
     def add_potential_matches(self, matches: Iterable[Match]) -> None:
         self.potential_matches.extend(matches)
 
@@ -75,26 +71,6 @@ class FlavinDependentHalogenase:
                     best_match.append(profile)
 
         return best_match
-
-    def finalize_enzyme(self) -> None:
-        """ If there is a best match among the matches based on confidence,
-            get that one match and define position, confidence and signature
-            in the enzyme instance based on that.
-            If there is no one best match, it doesn't change anything."""
-        best_matches = self.get_best_matches()
-        assert isinstance(best_matches, list), best_matches
-        if not best_matches:
-            return
-
-        if len(best_matches) == 1:
-            best_match = best_matches[0]
-            assert best_match.cofactor == self.cofactor
-            assert best_match.family == self.family, f"{best_match.family}, {self.family}"
-            self.target_positions = best_match.target_positions
-            self.consensus_residues = best_match.consensus_residues
-            self.confidence = best_match.confidence
-            self.number_of_decorations = best_match.number_of_decorations
-            self.substrates = tuple(match.substrate for match in [best_match] if match.substrate)
 
     def to_json(self) -> dict[str, Any]:
         """ Constructs a JSON representation of this instance """
@@ -258,7 +234,7 @@ class Profile:
 
         # value checks
         if len(self._motif_mapping) != len(self.motifs):
-            raise ValueError("Provided motifs are not uniquely named")
+            raise ValueError("provided motifs are not uniquely named")
         if not self.cutoffs:
             raise ValueError("at least one cutoff is required for the HMM profile")
 
@@ -303,25 +279,12 @@ class Profile:
             Returns:
                 the new match
         """
-        return Match(self.profile_name, FlavinDependentHalogenase.cofactor, FlavinDependentHalogenase.family, confidence, residues,
+        return Match(self.profile_name, FlavinDependentHalogenase.cofactor, FlavinDependentHalogenase.family,
+                     confidence, residues,
                      target_positions=self.modification_positions, substrate=motif.substrate,
                      number_of_decorations=motif.decorations)
-
-    def get_motif_by_name(self, name: str) -> MotifDetails:
-        """ Returns the motif for this halogenase type with the given name """
-        return self._motif_mapping[name]
 
     @property
     def motif_names(self) -> tuple[str, ...]:
         """ The names of the motifs within this halogenase type """
         return tuple(motif.name for motif in self.motifs)
-
-    @property
-    def motif_positions(self) -> tuple[tuple[int, ...], ...]:
-        """ The signature positions of each motif within this halogenase type """
-        return tuple(motif.positions for motif in self.motifs)
-
-    @property
-    def motif_residues(self) -> tuple[str, ...]:
-        """ The residues of each motif within this halogenase type """
-        return tuple(motif.residues for motif in self.motifs)
