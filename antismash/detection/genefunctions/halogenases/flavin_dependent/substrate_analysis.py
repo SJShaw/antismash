@@ -66,7 +66,7 @@ def retrieve_fdh_signature_residues(translation: str, hmm_result: HalogenaseHmmR
             continue
         residues = extract_residues(translation, motif.positions, hmm_result)
         if residues:
-            signature_residues[motif.substrate] = residues
+            signature_residues[motif.name] = residues
     return signature_residues
 
 
