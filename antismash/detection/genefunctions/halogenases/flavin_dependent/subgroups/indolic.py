@@ -28,7 +28,6 @@ class TryptophanProfile(Profile):
                 modifier = .5
                 continue
 
-            print("creating match", self.modification_positions, hit.bitscore, cutoff)
             match = Match(
                 hit.query_id, FlavinDependentHalogenase.cofactor, FlavinDependentHalogenase.family,
                 confidence * modifier, consensus_residues="",
@@ -37,7 +36,6 @@ class TryptophanProfile(Profile):
                 substrate="tryptophan",
             )
             if not check_residues:
-                print("appended")
                 matches.append(match)
                 break
 
@@ -46,7 +44,6 @@ class TryptophanProfile(Profile):
                     continue
                 match.consensus_residues = motif.residues
                 matches.append(match)
-                print("appended")
             break  # lower cutoffs are irrelevant if a higher is satisfied
         return matches
 
@@ -115,10 +112,10 @@ def update_match(retrieved_residues: dict[str, str], halogenase: FlavinDependent
             otherwise, it doesn't return anything and doesn't instanciate anything
     """
     matches = []
-    if hit.hit_id == "trp_5_FDH":
+    if hit.query_id == "trp_5_FDH":
         matches = TRP_5.get_matches_from_hit(retrieved_residues, hit)
         assert len(matches) == 1, matches
-    elif hit.hit_id == "trp_6_7_FDH":
+    elif hit.query_id == "trp_6_7_FDH":
         matches = TRP_6.get_matches_from_hit(retrieved_residues, hit)
         if not matches:
             matches = TRP_7.get_matches_from_hit(retrieved_residues, hit, check_residues=False)

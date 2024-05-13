@@ -168,23 +168,10 @@ def create_motif_residue_mapping(profile):
     return {motif.name: motif.residues for motif in profile.motifs}
 
 
-class PyrrolicBase(unittest.TestCase):
-    def setUp(self):
-        self.pyrrole_enzyme = FDH("bmp2")
-
-        self.pyrrole_hmm_result = HalogenaseHmmResult(
-            hit_id="pyrrole_FDH",
-            bitscore=1000,
-            query_id="pyrrole_FDH",
-            profile=pyrrolic.SPECIFIC_PROFILES[0].path
-        )
-
-        self.negative_pyrrole_hmm_result = HalogenaseHmmResult(
-            hit_id="pyrrole_FDH",
-            bitscore=1,
-            query_id="pyrrole_FDH",
-            profile=pyrrolic.SPECIFIC_PROFILES[0].path
-        )
+def test_categorisation_with_no_hits():
+    with patch.object(substrate_analysis, "retrieve_fdh_signature_residues", return_value={}):
+        result = categorize_on_substrate_level(DummyCDS(), FDH("dummy"), [])
+    assert result is None
 
 
 class IndolicBase(unittest.TestCase):
@@ -199,13 +186,13 @@ class IndolicBase(unittest.TestCase):
         )
 
         self.trp_5_hmm_result = HalogenaseHmmResult(
-            hit_id="trp_5_FDH",
+            hit_id="query",
             bitscore=1000,
             query_id="trp_5_FDH",
             profile=indolic.SPECIFIC_PROFILES[0].path,
         )
         self.trp_6_7_hmm_result = HalogenaseHmmResult(
-            hit_id="trp_6_7_FDH",
+            hit_id="query",
             bitscore=1000,
             query_id="trp_6_7_FDH",
             profile=indolic.SPECIFIC_PROFILES[1].path,
@@ -219,7 +206,7 @@ class IndolicBase(unittest.TestCase):
         # Trp-6 halogenase
         self.trp_enzyme_with_matches = FDH("ktzR", potential_matches=tryptophan_single_matches)
         # Trp-7 halogenase
-        self.trp_empty_enzyme = FDH("ktzQ")
+        self.trp_with_no_matches = FDH("ktzQ")
 
     def specific_analysis_test(self, name, fake_hit,
                                fake_hsps, categorize_return_value,
@@ -280,7 +267,7 @@ class TestPhenolic(unittest.TestCase):
         self.hpg_enzyme = FDH("End30")
 
         # other phenolic-substrate halogenase (orsellinic-like)
-        self.orsellinic_empty_enzyme = FDH("ChlB4")
+        self.orsellinic_with_no_matches = FDH("ChlB4")
 
         self.tyrosine_match_not_hpg = {
             "Tyr": "GFQRLGDAGLSGVPSYGADPSGLYW",
@@ -290,9 +277,9 @@ class TestPhenolic(unittest.TestCase):
     def test_categorising_orsellinic(self):
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
                           return_value=create_motif_residue_mapping(phenolic.ORSELLINIC)):
-            categorize_on_substrate_level(DummyCDS(), self.orsellinic_empty_enzyme,
+            categorize_on_substrate_level(DummyCDS(), self.orsellinic_with_no_matches,
                                           [self.cycline_orsellinic_hmm_result])
-        match = self.orsellinic_empty_enzyme.potential_matches[0]
+        match = self.orsellinic_with_no_matches.potential_matches[0]
         assert match.profile == "cycline_orsellinic_FDH"
         assert match.confidence == 1
         assert match.substrate == "cycline_orsellinic-like"
@@ -301,7 +288,7 @@ class TestPhenolic(unittest.TestCase):
     def test_categorising_hpg(self):
         with patch.object(substrate_analysis, "extract_residues",
                           return_value=""):
-            assert not categorize_on_substrate_level(DummyCDS(), self.orsellinic_empty_enzyme,
+            assert not categorize_on_substrate_level(DummyCDS(), self.orsellinic_with_no_matches,
                                                      [self.cycline_orsellinic_hmm_result])
 
         # Tyr and Hpg halogenases
@@ -360,35 +347,51 @@ class TestPhenolic(unittest.TestCase):
         assert residues["Tyr"] is not None and residues["Hpg"] is not None
 
 
-class TestPyrrolic(PyrrolicBase):
+class TestPyrrolic(unittest.TestCase):
+    def setUp(self):
+        self.pyrrole_enzyme = FDH("bmp2")
+
+        self.strong_pyrrole_hit = HalogenaseHmmResult(
+            hit_id="query",
+            bitscore=1000,
+            query_id="pyrrole_FDH",
+            profile=pyrrolic.SPECIFIC_PROFILES[0].path
+        )
+
+        self.bad_pyrrole_hit = HalogenaseHmmResult(
+            hit_id="query",
+            bitscore=1,
+            query_id="pyrrole_FDH",
+            profile=pyrrolic.SPECIFIC_PROFILES[0].path
+        )
+
     def test_score_below_cutoff(self):
         cds = DummyCDS()
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
-                          return_value=create_motif_residue_mapping(pyrrolic.PYRROLE)) as patched:
-            assert not categorize_on_substrate_level(cds, self.pyrrole_enzyme,
-                                                     [self.negative_pyrrole_hmm_result])
-            patched.assert_called_once_with(cds, self.negative_pyrrole_hmm_result)
+                          return_value={}) as patched:
+            result = categorize_on_substrate_level(cds, self.pyrrole_enzyme, [self.bad_pyrrole_hit])
+            patched.assert_called_once_with(cds.translation, self.bad_pyrrole_hit, pyrrolic.PYRROLE.motifs)
+        assert not result
 
     def test_no_motif(self):
         cds = DummyCDS()
-        with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
-                          return_value={}) as patched:
-            assert not categorize_on_substrate_level(cds, self.pyrrole_enzyme,
-                                                     [self.pyrrole_hmm_result])
-            patched.assert_called_once_with(cds.translation, self.pyrrole_hmm_result, pyrrolic.PYRROLE.motifs)
+        with patch.object(substrate_analysis, "retrieve_fdh_signature_residues", return_value={}) as patched:
+            result = categorize_on_substrate_level(cds, self.pyrrole_enzyme, [self.strong_pyrrole_hit])
+            patched.assert_called_once_with(cds.translation, self.strong_pyrrole_hit, pyrrolic.PYRROLE.motifs)
+        assert not result
 
     def test_conventional_mono_di(self):
         cds = DummyCDS()
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
                           return_value={"mono_di": "DRSVFW"}) as patched:
             assert categorize_on_substrate_level(cds, self.pyrrole_enzyme,
-                                                 [self.pyrrole_hmm_result])
+                                                 [self.strong_pyrrole_hit])
             match = self.pyrrole_enzyme.potential_matches[0]
             assert match.confidence == 1
             assert match.number_of_decorations == "mono_di"
             assert match.profile == "pyrrole_FDH"
             assert match.substrate == "pyrrole"
-            patched.assert_called_once_with(cds.translation, self.pyrrole_hmm_result, pyrrolic.PYRROLE.motifs)
+            patched.assert_called_once_with(cds.translation, self.strong_pyrrole_hit, pyrrolic.PYRROLE.motifs)
 
     def test_unconventional_mono_di(self):
         cds = DummyCDS()
@@ -396,35 +399,34 @@ class TestPyrrolic(PyrrolicBase):
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
                           return_value={name: "YRRNFN"}) as patched:
             assert categorize_on_substrate_level(cds, self.pyrrole_enzyme,
-                                                 [self.pyrrole_hmm_result])
+                                                 [self.strong_pyrrole_hit])
             match = self.pyrrole_enzyme.potential_matches[0]
             assert match.confidence == 1
             assert match.number_of_decorations == name
             assert match.profile == "pyrrole_FDH"
             assert match.substrate == "pyrrole"
-            patched.assert_called_once_with(cds.translation, self.pyrrole_hmm_result, pyrrolic.PYRROLE.motifs)
+            patched.assert_called_once_with(cds.translation, self.strong_pyrrole_hit, pyrrolic.PYRROLE.motifs)
 
     def test_tetra(self):
         cds = DummyCDS()
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
-                          return_value={"tetra": "RRYFFA"}) as patched:
-            assert categorize_on_substrate_level(cds, self.pyrrole_enzyme,
-                                                 [self.pyrrole_hmm_result])
+                          return_value={"tetra_mono_di": "RRYFFA"}) as patched:
+            assert categorize_on_substrate_level(cds, self.pyrrole_enzyme, [self.strong_pyrrole_hit])
             match = self.pyrrole_enzyme.potential_matches[0]
             assert match.confidence == 1
             assert match.number_of_decorations == "tetra"
             assert match.profile == "pyrrole_FDH"
             assert match.substrate == "pyrrole"
-            patched.assert_called_once_with(cds, self.pyrrole_hmm_result)
+            patched.assert_called_once_with(cds.translation, self.strong_pyrrole_hit, pyrrolic.PYRROLE.motifs)
 
     def test_residue_mismatch(self):
         residues = {"pyrrole_FDH": "ABCDEF"}
-        assert not pyrrolic.PYRROLE.get_matches_from_hit(residues, self.pyrrole_hmm_result)
+        assert not pyrrolic.PYRROLE.get_matches_from_hit(residues, self.strong_pyrrole_hit)
 
 
 class TestIndolic(IndolicBase):
     def test_get_best_matches(self):
-        assert not self.trp_empty_enzyme.get_best_matches()
+        assert not self.trp_with_no_matches.get_best_matches()
 
         positive_test_best_match = self.trp_enzyme_with_matches.get_best_matches()
 
@@ -511,12 +513,12 @@ class TestIndolic(IndolicBase):
         cds = DummyCDS()
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
                           return_value={"trp_5_FDH": indolic.TRP_5_MOTIF.residues}) as patched:
-            categorize_on_substrate_level(DummyCDS(), self.trp_empty_enzyme, [self.trp_5_hmm_result])
+            categorize_on_substrate_level(DummyCDS(), self.trp_with_no_matches, [self.trp_5_hmm_result])
             patched.assert_called_once_with(
                 cds.translation, self.trp_5_hmm_result, (indolic.TRP_5_MOTIF,),
             )
 
-        match = self.trp_empty_enzyme.potential_matches[0]
+        match = self.trp_with_no_matches.potential_matches[0]
         assert match.profile == "trp_5_FDH"
         assert match.confidence == 1
         assert match.substrate == "tryptophan"
@@ -527,8 +529,8 @@ class TestIndolic(IndolicBase):
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
                           return_value={motif.name: motif.residues for motif in indolic.TRP_5.motifs}):
             low_quality_hit = HalogenaseHmmResult("trp_5_FDH", 380, "trp_5_FDH", "trp_5_FDH")
-            categorize_on_substrate_level(DummyCDS(), self.trp_empty_enzyme, [low_quality_hit])
-        match = self.trp_empty_enzyme.potential_matches[0]
+            categorize_on_substrate_level(DummyCDS(), self.trp_with_no_matches, [low_quality_hit])
+        match = self.trp_with_no_matches.potential_matches[0]
         assert match.profile == "trp_5_FDH"
         assert match.confidence == 0.5
         assert match.substrate == "tryptophan"
@@ -538,9 +540,9 @@ class TestIndolic(IndolicBase):
     def test_trp_6(self):
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
                           return_value=create_motif_residue_mapping(indolic.TRP_6)):
-            categorize_on_substrate_level(DummyCDS(), self.trp_empty_enzyme,
+            categorize_on_substrate_level(DummyCDS(), self.trp_with_no_matches,
                                           [self.trp_6_7_hmm_result])
-        match = self.trp_empty_enzyme.potential_matches[0]
+        match = self.trp_with_no_matches.potential_matches[0]
         assert match.profile == "trp_6_7_FDH"
         assert match.confidence == 1.0
         assert match.substrate == "tryptophan"
@@ -550,24 +552,18 @@ class TestIndolic(IndolicBase):
     def test_trp_7(self):
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
                           return_value=create_motif_residue_mapping(indolic.TRP_7)):
-            categorize_on_substrate_level(DummyCDS(), self.trp_empty_enzyme, [self.trp_6_7_hmm_result])
-        match = self.trp_empty_enzyme.potential_matches[0]
+            categorize_on_substrate_level(DummyCDS(), self.trp_with_no_matches, [self.trp_6_7_hmm_result])
+        match = self.trp_with_no_matches.potential_matches[0]
         assert match.profile == "trp_6_7_FDH"
         assert match.confidence == 1.
         assert match.target_positions == (7,)
         assert match.substrate == "tryptophan"
         assert match.number_of_decorations == "mono"
 
-    def test_no_match(self):
-        with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
-                          return_value={}):
-            result = categorize_on_substrate_level(DummyCDS(), self.trp_empty_enzyme, [self.trp_6_7_hmm_result])
-        assert result is None
-
     @patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
                   return_value=create_motif_residue_mapping(indolic.TRP_5))
     def test_categorise_substrate_no_match(self, _patched_retrieve_fdh_signature_residues):
-        result = categorize_on_substrate_level(DummyCDS(), self.trp_empty_enzyme, [])
+        result = categorize_on_substrate_level(DummyCDS(), self.trp_with_no_matches, [])
         assert result is None
 
     @patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
@@ -628,15 +624,15 @@ class TestGeneralEnzymes(IndolicBase):
     def setUp(self):
         super().setUp()
 
-        self.general_empty_enzyme = FDH("CtoA")
-        self.unconventional_empty_enzyme = FDH("VatD")
+        self.general_enzyme_with_no_matches = FDH("CtoA")
+        self.unconventional_enzyme_with_no_matches = FDH("VatD")
 
     @patch.object(substrate_analysis, "extract_residues",
                   return_value="VALAMIVALAMI")
     def test_unconventional_fdh_specific_analysis(self, _patched_extract_residues):
         positive_test = self.specific_analysis_test("VatD", FakeHit(1, 2, 200, "unconventional_FDH"),
                                                     FakeHSPHit("unconventional_FDH", "VatD", bitscore=200),
-                                                    self.unconventional_empty_enzyme, [],
+                                                    self.unconventional_enzyme_with_no_matches, [],
                                                     fdh_specific_analysis)
         assert isinstance(positive_test[0], FDH)
         assert positive_test[0].substrates is None
@@ -649,7 +645,7 @@ class TestGeneralEnzymes(IndolicBase):
         positive_test = self.specific_analysis_test("CtoA",
                                                     FakeHit(1, 2, 200, "all_general_FDH"),
                                                     FakeHSPHit("all_general_FDH", "CtoA", bitscore=200),
-                                                    self.general_empty_enzyme, [],
+                                                    self.general_enzyme_with_no_matches, [],
                                                     fdh_specific_analysis)
 
         assert not positive_test[0].substrates
@@ -672,7 +668,7 @@ class TestGeneralEnzymes(IndolicBase):
     def test_specific_analysis(self, _patched_extract_residues):
         categorized_halogenase = self.specific_analysis_test("CtoA", FakeHit(1, 2, 200, "all_general_FDH"),
                                                              FakeHSPHit("all_general_FDH", "CtoA", bitscore=200),
-                                                             self.general_empty_enzyme, [],
+                                                             self.general_enzyme_with_no_matches, [],
                                                              specific_analysis)
         assert categorized_halogenase[0].consensus_residues == {"W.W.I.": "WIWVIR"}
 
@@ -680,7 +676,7 @@ class TestGeneralEnzymes(IndolicBase):
     def test_negative_get_conserved_motifs(self, _patched_extract_residues):
         categorized_halogenase = self.specific_analysis_test("VatD", FakeHit(1, 2, 200, "unconventional_FDH"),
                                                              FakeHSPHit("unconventional_FDH", "VatD", bitscore=200),
-                                                             self.unconventional_empty_enzyme, [],
+                                                             self.unconventional_enzyme_with_no_matches, [],
                                                              specific_analysis)
         assert categorized_halogenase
         assert categorized_halogenase[0].consensus_residues == {}
@@ -690,5 +686,5 @@ class TestGeneralEnzymes(IndolicBase):
         no_potential_matches = self.specific_analysis_test("VatD",
                                                            FakeHit(1, 2, 200, "unconventional_FDH"),
                                                            FakeHSPHit("unconventional_FDH", "VatD", bitscore=200),
-                                                           self.unconventional_empty_enzyme, [], fdh_specific_analysis)
+                                                           self.unconventional_enzyme_with_no_matches, [], fdh_specific_analysis)
         assert not no_potential_matches[0].potential_matches

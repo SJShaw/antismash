@@ -136,8 +136,9 @@ def run_halogenase_phmms(cluster_fasta: str, profiles: list[HmmSignature],
         for runresult in run_results:
             for hsp in runresult.hsps:
                 if hsp.bitscore > sig.cutoff:
-                    hit = HalogenaseHmmResult(hsp.hit_id, hsp.bitscore, hsp.query_id, sig.path)
-                    halogenase_hmms_by_id[hsp.hit_id].append(hit)
+                    cds_name = hsp.hit_id
+                    hit = HalogenaseHmmResult(cds_name, hsp.bitscore, hsp.query_id, sig.path)
+                    halogenase_hmms_by_id[cds_name].append(hit)
     return halogenase_hmms_by_id
 
 
