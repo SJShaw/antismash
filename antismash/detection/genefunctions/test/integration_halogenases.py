@@ -53,9 +53,10 @@ class TestHalongenases(unittest.TestCase):
         record.create_regions()
         assert dummy_halogenase in record.get_cds_features_within_regions()
         results = halo_analysis(record)
-        assert len(results) == 2
 
+        assert len(results) == 2
         first, second = results
+
         assert first.cds_name == "bhaA"
         assert second.cds_name == "ChlB4"
 

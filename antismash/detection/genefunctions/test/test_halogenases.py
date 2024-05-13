@@ -561,8 +561,8 @@ class TestIndolic(IndolicBase):
     def test_no_match(self):
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
                           return_value={}):
-            assert categorize_on_substrate_level(DummyCDS(), self.trp_empty_enzyme,
-                                                 [self.trp_6_7_hmm_result]) is None
+            result = categorize_on_substrate_level(DummyCDS(), self.trp_empty_enzyme, [self.trp_6_7_hmm_result])
+        assert result is None
 
     @patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
                   return_value=create_motif_residue_mapping(indolic.TRP_5))

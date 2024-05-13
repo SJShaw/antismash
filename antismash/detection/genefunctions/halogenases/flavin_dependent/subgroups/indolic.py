@@ -21,10 +21,6 @@ from antismash.detection.genefunctions.halogenases.data_structures import (
 class TryptophanProfile(Profile):
     def get_matches_from_hit(self, retrieved_residues: dict[str, str], hit: HalogenaseHmmResult,
                              confidence: float = 1., check_residues: bool = True) -> list[Match]:
-        # if there are no motifs, then any found will break the equality check later
-        if not self.motif_residues:
-            retrieved_residues = {}
-        assert isinstance(retrieved_residues, dict)
         modifier = 1.
         matches = []
         for cutoff in self.cutoffs:
@@ -32,6 +28,7 @@ class TryptophanProfile(Profile):
                 modifier = .5
                 continue
 
+            print("creating match", self.modification_positions, hit.bitscore, cutoff)
             match = Match(
                 hit.query_id, FlavinDependentHalogenase.cofactor, FlavinDependentHalogenase.family,
                 confidence * modifier, consensus_residues="",
@@ -40,6 +37,7 @@ class TryptophanProfile(Profile):
                 substrate="tryptophan",
             )
             if not check_residues:
+                print("appended")
                 matches.append(match)
                 break
 
@@ -48,6 +46,7 @@ class TryptophanProfile(Profile):
                     continue
                 match.consensus_residues = motif.residues
                 matches.append(match)
+                print("appended")
             break  # lower cutoffs are irrelevant if a higher is satisfied
         return matches
 
