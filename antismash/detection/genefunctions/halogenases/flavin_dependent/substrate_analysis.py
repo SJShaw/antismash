@@ -62,6 +62,8 @@ def retrieve_fdh_signature_residues(translation: str, hmm_result: HalogenaseHmmR
     """
     signature_residues: dict[str, str] = {}
     for motif in motifs:
+        if not motif.positions:
+            continue
         residues = extract_residues(translation, motif.positions, hmm_result)
         if residues:
             signature_residues[motif.substrate] = residues
@@ -82,6 +84,8 @@ def extract_residues(sequence: str, positions: Iterable[int],
         Returns:
             residues that are present in the given positions
     """
+    if not positions:
+        raise ValueError("cannot extract residues without positions")
     alignment = get_alignment_against_profile(sequence, hmm_result.profile, hmm_result.query_id)
     if not alignment:
         return None
