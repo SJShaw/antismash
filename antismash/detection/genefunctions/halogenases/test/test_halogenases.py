@@ -6,13 +6,9 @@
 
 import json
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from antismash.common import (
-    fasta,
-    path,
-    subprocessing,
-)
+from antismash.common import subprocessing, utils
 from antismash.common.secmet.test.helpers import DummyCDS
 from antismash.common.signature import HmmSignature
 from antismash.common.test.helpers import FakeHSPHit, FakeHit
@@ -25,6 +21,7 @@ from antismash.detection.genefunctions.halogenases.flavin_dependent import subst
 from antismash.detection.genefunctions.halogenases.flavin_dependent.substrate_analysis import (
     run_halogenase_phmms,
     categorize_on_substrate_level,
+    extract_residues,
 )
 
 
@@ -85,6 +82,19 @@ def test_run_halogenase_phmms(_patched):
         assert isinstance(hit, HalogenaseHmmResult)
 
 
+@patch.object(substrate_analysis, "extract_residues",
+              return_value="PREFIXWIWVIRYGMIGDAASVIDAYYSQGVSLALVT")
+def test_random(_patched_extract):
+    name = "CtoA"
+    result = substrate_analysis.categorize_on_consensus_level(
+        DummyCDS(locus_tag=name),
+        {},
+        [HalogenaseHmmResult(name, 200, "all_conventional_FDH", "flavin-dependent")],
+    )
+    assert result.consensus_residues == {"W.W.I.": "WIWVIR"}  # is this regex intended to be "starts with"?
+    assert not result.potential_matches
+
+
 class TestGetBest(unittest.TestCase):
     def setUp(self):
         self.high_confidence_match = Match(
@@ -125,3 +135,23 @@ class TestGetBest(unittest.TestCase):
         matches = [self.low_confidence_match]
         best = FDH("test_enzyme", potential_matches=matches).get_best_matches()
         assert best == matches
+
+
+class TestExtract(unittest.TestCase):
+    def test_no_alignment(self):
+        with patch.object(utils, "extract_from_alignment", side_affect=RuntimeError("should not have been called")):
+            with patch.object(substrate_analysis, "get_alignment_against_profile", return_value=None):
+                assert extract_residues("MAGIC", [1, 5, 6], Mock()) is None
+
+    def test_alignment_passed(self):
+        positions = [1, 5, 6]
+        alignment = Mock()
+        with patch.object(utils, "extract_from_alignment", return_value="dummy") as patched_util:
+            with patch.object(substrate_analysis, "get_alignment_against_profile", return_value=alignment):
+                result = extract_residues("MAGIC", positions, Mock())
+                assert result == "dummy"
+            patched_util.assert_called_once_with(alignment, positions)
+
+    def test_invalid_positions(self):
+        with self.assertRaisesRegex(ValueError, "without positions"):
+            extract_residues("MAGIC", [], Mock())

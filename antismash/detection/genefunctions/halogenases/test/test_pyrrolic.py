@@ -7,7 +7,6 @@
 import unittest
 from unittest.mock import patch
 
-from antismash.common import fasta, path
 from antismash.common.test.helpers import DummyCDS
 from antismash.detection.genefunctions.halogenases import (
     HalogenaseHmmResult,

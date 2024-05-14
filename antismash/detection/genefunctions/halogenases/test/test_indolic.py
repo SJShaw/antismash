@@ -246,18 +246,6 @@ class TestSpecificAnalysis(IndolicBase):
 
     @patch.object(substrate_analysis, "extract_residues",
                   return_value="WIWVIRYGMIGDAASVIDAYYSQGVSLALVT")
-    def test_random(self, _patched_extract_residues):
-        name = "CtoA"
-        result = substrate_analysis.categorize_on_consensus_level(
-            DummyCDS(locus_tag=name),
-            {},
-            [HalogenaseHmmResult(name, 200, "all_conventional_FDH", "flavin-dependent")],
-        )
-        assert result.consensus_residues == {"W.W.I.": "WIWVIR"}  # is this regex intended to be "starts with"?
-        assert not result.potential_matches
-
-    @patch.object(substrate_analysis, "extract_residues",
-                  return_value="WIWVIRYGMIGDAASVIDAYYSQGVSLALVT")
     def test_good_match(self, _patched_extract_residues):
         name = "CtoA"
         result = self.specific_analysis_test(name, FakeHit(1, 2, 200, "all_general_FDH"),

@@ -13,8 +13,8 @@ from antismash.config import build_config, destroy_config, get_config, update_co
 from antismash.detection.genefunctions import prepare_data
 from antismash.detection.genefunctions.halogenases import specific_analysis as halo_analysis
 
-# this particular one is ChlB4 from... TODO?
 TRANSLATIONS = fasta.read_fasta(path.get_full_path(__file__, "data", "translations.fasta"))
+# convert to just gene name, instead of the full info in each FASTA header
 TRANSLATIONS = {key.rsplit("|", 1)[-1]: value for key, value in TRANSLATIONS.items()}
 
 
