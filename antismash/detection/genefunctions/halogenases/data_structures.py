@@ -4,14 +4,14 @@
 # for test files, silence irrelevant and noisy pylint warnings
 # pylint: disable=use-implicit-booleaness-not-comparison,protected-access,missing-docstring
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any, ClassVar, Iterable, Iterator, Optional, Self
 
 from antismash.common.hmmscan_refinement import HMMResult
 from antismash.common.signature import HmmSignature
 
 
-@dataclass
+@dataclass(slots=True)
 class Match:
     """ Match of the enzyme categorized by check_for_fdh,
         with details about which pHMM (profile) was hit, what position
@@ -27,9 +27,7 @@ class Match:
     number_of_decorations: str = ""
 
     def to_json(self) -> dict[str, Any]:
-        data = dict(vars(self))
-        data["target_positions"] = list(data["target_positions"])
-        return data
+        return asdict(self)
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> "Match":
@@ -38,7 +36,7 @@ class Match:
         return cls(**data)
 
 
-@dataclass
+@dataclass(slots=True)
 class FlavinDependentHalogenase:
     cds_name: str
     potential_matches: list[Match] = field(default_factory=list)
