@@ -179,6 +179,7 @@ def categorize_on_substrate_level(cds: CDSFeature, halogenase_match: FlavinDepen
 def categorize_on_consensus_level(cds: CDSFeature, specific_hmm_hits: list[HalogenaseHmmResult],
                                   general_hmm_hits: list[HalogenaseHmmResult],
                                   ) -> FlavinDependentHalogenase:
+    assert len(general_hmm_hits) == 1, general_hmm_hits
     # determine conventionality
     conserved_motifs: dict[str, str] = {}
     for hit in general_hmm_hits:
@@ -215,8 +216,8 @@ def fdh_specific_analysis(record: Record) -> list[FlavinDependentHalogenase]:
     enzymes_with_hits = []
     hmmsearch_fasta = fasta.get_fasta_from_features(record.get_cds_features_within_regions())
 
-    hits = hmmscan.run_hmmscan(substrates.ALL_FDH_PROFILES,
-                               hmmsearch_fasta)
+    hits = hmmscan.run_hmmscan(substrates.ALL_FDH_PROFILES, hmmsearch_fasta)
+    import logging; logging.critical("discarding good info")  # TODO
     for query_result in hits:
         if query_result.hits:
             enzymes_with_hits.append(record.get_cds_by_name(query_result.id))

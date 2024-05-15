@@ -32,7 +32,7 @@ TRANSLATIONS = {key.rsplit("|", 1)[-1]: value for key, value in TRANSLATIONS.ite
 
 
 class FDH(_FDH):
-    def __init__(self, name="dummy", conventionality_residues="ABCDEF", potential_matches=None):
+    def __init__(self, name="dummy", conventionality_residues={"AMOTIF": "ABCDEF"}, potential_matches=None):
         super().__init__(name, conventionality_residues, potential_matches or [])
 
 

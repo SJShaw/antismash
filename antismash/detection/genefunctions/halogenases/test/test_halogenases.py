@@ -8,8 +8,8 @@ import json
 import unittest
 from unittest.mock import Mock, patch
 
-from antismash.common import subprocessing, utils
-from antismash.common.secmet.test.helpers import DummyCDS
+from antismash.common import secmet, subprocessing, utils
+from antismash.common.secmet.test.helpers import DummyCDS, DummyRecord
 from antismash.common.signature import HmmSignature
 from antismash.common.test.helpers import FakeHSPHit, FakeHit
 from antismash.detection.genefunctions.halogenases import (
@@ -19,9 +19,10 @@ from antismash.detection.genefunctions.halogenases import (
 )
 from antismash.detection.genefunctions.halogenases.flavin_dependent import substrate_analysis
 from antismash.detection.genefunctions.halogenases.flavin_dependent.substrate_analysis import (
-    run_halogenase_phmms,
     categorize_on_substrate_level,
     extract_residues,
+    fdh_specific_analysis,
+    run_halogenase_phmms,
 )
 
 
@@ -30,78 +31,92 @@ class FDH(_FDH):
         super().__init__(name, conventionality_residues, potential_matches or [])
 
 
-def test_categorisation_with_no_hits():
-    with patch.object(substrate_analysis, "retrieve_fdh_signature_residues", return_value={}):
-        result = categorize_on_substrate_level(DummyCDS(), FDH("dummy"), [])
-    assert result is None
-
-
-def test_conversion_methods():
-    fdh = FDH("dummy")
-    fdh.add_potential_matches([
-        Match(
-            "prof_A",
-            "flavin",
-            "flavin-dependent",
-            confidence=0.5,
-            consensus_residues="MAGIC",
-            substrate="some_sub",
-            target_positions=(3, 4),
-            number_of_decorations="deco",
-        ),
-        Match(
-            "prof_B",
-            "flavin",
-            "flavin-dependent",
-            confidence=0.1,
-            consensus_residues="BEANS",
-            substrate="other_sub",
-            target_positions=(1,),
-        ),
-    ])
-    original = fdh.to_json()
-    assert isinstance(original, dict)
-    raw = json.loads(json.dumps(original))
-
-    rebuilt = FDH.from_json(raw)
-    assert isinstance(rebuilt, FDH)
-    assert rebuilt.to_json() == original
-
-
-@patch.object(subprocessing, "run_hmmsearch",
-              return_value=[FakeHit(1, 2, 1000, "foo")])
-def test_run_halogenase_phmms(_patched):
-    signature = HmmSignature("foo", "description", 300, "dummy_path")
-    for value in _patched.return_value:
-        value.hsps = [FakeHSPHit("foo", "query", bitscore=250)]
-
-    negative_test_halogenase_hmms_by_id = run_halogenase_phmms("", [signature])
-    assert not negative_test_halogenase_hmms_by_id
-
-    for value in _patched.return_value:
-        value.hsps = [FakeHSPHit("foo", "query", bitscore=1000)]
-
-    positive_test_halogenase_hmms_by_id = run_halogenase_phmms("", [signature])
-    assert positive_test_halogenase_hmms_by_id
-    for hit in positive_test_halogenase_hmms_by_id["foo"]:
-        assert isinstance(hit, HalogenaseHmmResult)
-
-
-@patch.object(substrate_analysis, "extract_residues",
-              return_value="PREFIXWIWVIRYGMIGDAASVIDAYYSQGVSLALVT")
-def test_conventional_non_specific(_patched_extract):
-    name = "CtoA"
-    result = substrate_analysis.categorize_on_consensus_level(
-        DummyCDS(locus_tag=name),
-        {},
-        [HalogenaseHmmResult(name, 200, "all_conventional_FDH", "flavin-dependent")],
-    )
-    assert result.conventionality_residues == {"W.W.I.": "WIWVIR"}
-    assert not result.potential_matches
-
-
-class TestGetBest(unittest.TestCase):
+class BlockHmmer(unittest.TestCase):
     def setUp(self):
+        self.hmmpfam = patch.object(subprocessing, "run_hmmpfam2", side_effect=ValueError("hmmpfam2 should not run"))
+        self.hmmpfam.start()
+        self.hmmscan = patch.object(subprocessing.hmmscan, "run_hmmscan", side_effect=ValueError("hmmscan should not run"))
+        self.hmmscan.start()
+        self.hmmsearch = patch.object(subprocessing.hmmsearch, "run_hmmsearch", side_effect=ValueError("hmmsearch should not run"))
+        self.hmmsearch.start()
+
+    def tearDown(self):
+        self.hmmpfam.stop()
+        self.hmmscan.stop()
+        self.hmmsearch.stop()
+
+
+class TestComponents(BlockHmmer):
+    def test_categorisation_with_no_hits(self):
+        with patch.object(substrate_analysis, "retrieve_fdh_signature_residues", return_value={}):
+            result = categorize_on_substrate_level(DummyCDS(), FDH("dummy"), [])
+        assert result is None
+
+    def test_conversion_methods(self):
+        fdh = FDH("dummy")
+        fdh.add_potential_matches([
+            Match(
+                "prof_A",
+                "flavin",
+                "flavin-dependent",
+                confidence=0.5,
+                consensus_residues="MAGIC",
+                substrate="some_sub",
+                target_positions=(3, 4),
+                number_of_decorations="deco",
+            ),
+            Match(
+                "prof_B",
+                "flavin",
+                "flavin-dependent",
+                confidence=0.1,
+                consensus_residues="BEANS",
+                substrate="other_sub",
+                target_positions=(1,),
+            ),
+        ])
+        original = fdh.to_json()
+        assert isinstance(original, dict)
+        raw = json.loads(json.dumps(original))
+
+        rebuilt = FDH.from_json(raw)
+        assert isinstance(rebuilt, FDH)
+        assert rebuilt.to_json() == original
+
+    @patch.object(subprocessing, "run_hmmsearch",
+                  return_value=[FakeHit(1, 2, 1000, "foo")])
+    def test_run_halogenase_phmms(self, _patched):
+        signature = HmmSignature("foo", "description", 300, "dummy_path")
+        for value in _patched.return_value:
+            value.hsps = [FakeHSPHit("foo", "query", bitscore=250)]
+
+        negative_test_halogenase_hmms_by_id = run_halogenase_phmms("", [signature])
+        assert not negative_test_halogenase_hmms_by_id
+
+        for value in _patched.return_value:
+            value.hsps = [FakeHSPHit("foo", "query", bitscore=1000)]
+
+        positive_test_halogenase_hmms_by_id = run_halogenase_phmms("", [signature])
+        assert positive_test_halogenase_hmms_by_id
+        for hit in positive_test_halogenase_hmms_by_id["foo"]:
+            assert isinstance(hit, HalogenaseHmmResult)
+
+    @patch.object(substrate_analysis, "extract_residues",
+                  return_value="PREFIXWIWVIRYGMIGDAASVIDAYYSQGVSLALVT")
+    def test_conventional_non_specific(self, _patched_extract):
+        name = "CtoA"
+        result = substrate_analysis.categorize_on_consensus_level(
+            DummyCDS(locus_tag=name),
+            [],
+            [HalogenaseHmmResult(name, 200, "all_conventional_FDH", "flavin-dependent")],
+        )
+        assert result.conventionality_residues == {"W.W.I.": "WIWVIR"}
+        assert not result.potential_matches
+
+
+class TestGetBest(BlockHmmer):
+    def setUp(self):
+        super().setUp()
         self.high_confidence_match = Match(
             "prof_A",
             "flavin",
@@ -142,7 +157,7 @@ class TestGetBest(unittest.TestCase):
         assert best == matches
 
 
-class TestExtract(unittest.TestCase):
+class TestExtract(BlockHmmer):
     def test_no_alignment(self):
         with patch.object(utils, "extract_from_alignment", side_affect=RuntimeError("should not have been called")):
             with patch.object(substrate_analysis, "get_alignment_against_profile", return_value=None):
@@ -160,3 +175,44 @@ class TestExtract(unittest.TestCase):
     def test_invalid_positions(self):
         with self.assertRaisesRegex(ValueError, "without positions"):
             extract_residues("MAGIC", [], Mock())
+
+
+class TestSpecificAnalysis(BlockHmmer):
+    def specific_analysis_test(self, name, *, bitscore=200, profile_id="dummy_profile"):
+        cds = DummyCDS(locus_tag=name)
+        record = DummyRecord(features=[cds])
+
+        scan_result = [Mock(id=name, hits=True)]
+        with patch.object(subprocessing.hmmscan, "run_hmmscan", return_value=scan_result):
+            with patch.object(secmet.Record, "get_cds_features_within_regions", return_value=[cds]):
+                hmm_result = HalogenaseHmmResult(name, bitscore, profile_id, "dummy_path")
+                with patch.object(substrate_analysis, "run_halogenase_phmms", return_value={name: [hmm_result]}):
+                    return fdh_specific_analysis(record)
+        self.fail("unreachable")
+
+    @patch.object(subprocessing.hmmscan, "run_hmmscan", return_value=[])
+    def test_no_hits(self, _patched_hmmscan):
+        cds = DummyCDS()
+        record = DummyRecord(features=[cds])
+        with patch.object(secmet.Record, "get_cds_features_within_regions", return_value=[cds]):
+            results = fdh_specific_analysis(record)
+
+        assert results == []
+
+    @patch.object(substrate_analysis, "extract_residues",
+                  return_value="VALAMIVALAMI")
+    def test_unconventional(self, _patched_extract_residues):
+        name = "VatD"
+        result = self.specific_analysis_test(name, bitscore=200, profile_id="unconventional_FDH")
+        assert len(result) == 1
+        assert result[0].conventionality_residues == {}
+        assert not result[0].is_conventional()
+        assert not result[0].potential_matches
+
+    @patch.object(substrate_analysis, "extract_residues",
+                  return_value="WIWVIRYGMIGDAASVIDAYYSQGVSLALVT")
+    def test_conventional(self, _patched_extract_residues):
+        name = "CtoA"
+        result = self.specific_analysis_test(name, bitscore=200, profile_id="all_general_FDH")
+        assert len(result) == 1
+        assert result[0].conventionality_residues == {"W.W.I.": "WIWVIR"}

@@ -14,8 +14,6 @@ from antismash.common import (
 from antismash.common.test.helpers import (
     DummyCDS,
     DummyRecord,
-    FakeHSPHit,
-    FakeHit,
 )
 from antismash.detection.genefunctions.halogenases import (
     HalogenaseHmmResult,
@@ -93,25 +91,6 @@ class IndolicBase(unittest.TestCase):
         # Trp-7 halogenase
         self.trp_with_no_matches = FDH("")
 
-    def specific_analysis_test(self, name, fake_hit,
-                               fake_hsp, categorize_return_value,
-                               best_matches,
-                               analysis_function):
-        fake_hsp.id = name
-        fake_hsp.hits = fake_hit
-        for item in fake_hit:
-            item.hsps = [fake_hsp]  # TODO not sure why this is necessary
-
-        with patch.object(subprocessing.hmmscan, "run_hmmscan", return_value=[fake_hsp]):
-            with patch.object(subprocessing, "run_hmmsearch", return_value=fake_hit):
-                with patch.object(substrate_analysis, "categorize_on_substrate_level",
-                                  return_value=categorize_return_value):
-                    with patch.object(FDH, "get_best_matches", return_value=best_matches):
-                        cds = DummyCDS(locus_tag=name)
-                        record = DummyRecord(features=[cds])
-                        with patch.object(secmet.Record, "get_cds_features_within_regions", return_value=[cds]):
-                            return analysis_function(record)
-
 
 class TestIndolic(IndolicBase):
     def test_strong_trp_5(self):
@@ -184,70 +163,3 @@ class TestIndolic(IndolicBase):
                                 substrate="tryptophan", target_positions=(5,),
                                 number_of_decorations="mono")
         ]
-
-
-class TestSpecificAnalysis(IndolicBase):
-    @patch.object(subprocessing.hmmscan, "run_hmmscan", return_value=[])
-    def test_no_hits(self, _patched_hmmscan):
-        cds = DummyCDS()
-        record = DummyRecord(features=[cds])
-        with patch.object(secmet.Record, "get_cds_features_within_regions", return_value=[cds]):
-            results = fdh_specific_analysis(record)
-
-        assert results == []
-
-    @patch.object(substrate_analysis, "extract_residues",
-                  return_value="VALAMIVALAMI")
-    def test_unconventional(self, _patched_extract_residues):
-        name = "VatD"
-        result = self.specific_analysis_test(name, FakeHit(1, 2, 200, "unconventional_FDH"),
-                                             FakeHSPHit("unconventional_FDH", name, bitscore=200),
-                                             FDH(name), [],
-                                             fdh_specific_analysis)
-        assert len(result) == 1
-        assert result[0].conventionality_residues == {}
-        assert not result[0].is_conventional()
-        assert not result[0].potential_matches
-
-    @patch.object(substrate_analysis, "extract_residues",
-                  return_value="WIWVIRYGMIGDAASVIDAYYSQGVSLALVT")
-    def test_conventional(self, _patched_extract_residues):
-        name = "CtoA"
-        result = self.specific_analysis_test(name,
-                                             FakeHit(1, 2, 200, "all_general_FDH"),
-                                             FakeHSPHit("all_general_FDH", name, bitscore=200),
-                                             FDH(name), [],
-                                             fdh_specific_analysis)
-        assert len(result) == 1
-        assert result[0].conventionality_residues == {"W.W.I.": "WIWVIR"}
-
-    @patch.object(substrate_analysis, "extract_residues",
-                  return_value="WIWVIRYGMIGDAASVIDAYYSQGVSLALVT")
-    def test_good_match(self, _patched_extract_residues):
-        name = "CtoA"
-        result = self.specific_analysis_test(name, FakeHit(1, 2, 200, "all_general_FDH"),
-                                             FakeHSPHit("all_general_FDH", name, bitscore=200),
-                                             FDH(name), [],
-                                             specific_analysis)
-        assert len(result) == 1
-        assert result[0].conventionality_residues == {"W.W.I.": "WIWVIR"}
-
-    @patch.object(substrate_analysis, "extract_residues", return_value="VALAMI")
-    def test_hits_but_no_motifs(self, _patched_extract_residues):
-        name = "VatD"
-        result = self.specific_analysis_test(name, FakeHit(1, 2, 200, "unconventional_FDH"),
-                                             FakeHSPHit("unconventional_FDH", name, bitscore=200),
-                                             FDH(name), [],
-                                             specific_analysis)
-        assert len(result) == 1
-        assert result[0].conventionality_residues == {}
-
-    @patch.object(substrate_analysis, "extract_residues", return_value="")
-    def test_no_matches(self, _patched_extract_residues):
-        name = "VatD"
-        result = self.specific_analysis_test(name,
-                                             FakeHit(1, 2, 200, "unconventional_FDH"),
-                                             FakeHSPHit("unconventional_FDH", name, bitscore=200),
-                                             FDH(name), [], fdh_specific_analysis)
-        assert len(result) == 1
-        assert not result[0].potential_matches
