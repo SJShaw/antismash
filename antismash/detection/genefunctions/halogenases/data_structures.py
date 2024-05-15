@@ -65,9 +65,8 @@ class FlavinDependentHalogenase:
             if len(self.potential_matches) == 1:
                 return [self.potential_matches[0]]
 
-            highest_confidence = max(profile.confidence for profile in self.potential_matches)
             for profile in self.potential_matches:
-                if abs(profile.confidence - highest_confidence) <= 0.005:
+                if abs(profile.confidence - self.confidence) <= 0.005:
                     best_match.append(profile)
 
         return best_match

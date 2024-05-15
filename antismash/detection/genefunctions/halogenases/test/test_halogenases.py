@@ -94,11 +94,11 @@ class TestComponents(BlockHmmer):
         assert not negative_test_halogenase_hmms_by_id
 
         for value in _patched.return_value:
-            value.hsps = [FakeHSPHit("foo", "query", bitscore=1000)]
+            value.hsps = [FakeHSPHit("foo", "query_name", bitscore=1000)]
 
-        positive_test_halogenase_hmms_by_id = run_halogenase_phmms("", [signature])
-        assert positive_test_halogenase_hmms_by_id
-        for hit in positive_test_halogenase_hmms_by_id["foo"]:
+        results = run_halogenase_phmms("", [signature])["query_name"]
+        assert results
+        for hit in results:
             assert isinstance(hit, HalogenaseHmmResult)
 
     @patch.object(substrate_analysis, "extract_residues",
@@ -188,7 +188,6 @@ class TestSpecificAnalysis(BlockHmmer):
                 hmm_result = HalogenaseHmmResult(name, bitscore, profile_id, "dummy_path")
                 with patch.object(substrate_analysis, "run_halogenase_phmms", return_value={name: [hmm_result]}):
                     return fdh_specific_analysis(record)
-        self.fail("unreachable")
 
     @patch.object(subprocessing.hmmscan, "run_hmmscan", return_value=[])
     def test_no_hits(self, _patched_hmmscan):
