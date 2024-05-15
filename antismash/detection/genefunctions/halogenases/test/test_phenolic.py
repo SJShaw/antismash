@@ -15,7 +15,7 @@ from antismash.common.test.helpers import (
 )
 from antismash.detection.genefunctions.halogenases import (
     HalogenaseHmmResult,
-    FlavinDependentHalogenase as FDH,
+    FlavinDependentHalogenase as _FDH,
 )
 from antismash.detection.genefunctions.halogenases.flavin_dependent import (
     substrate_analysis,
@@ -29,6 +29,11 @@ from antismash.detection.genefunctions.halogenases.flavin_dependent.subgroups im
 
 TRANSLATIONS = fasta.read_fasta(path.get_full_path(__file__, "data", "translations.fasta"))
 TRANSLATIONS = {key.rsplit("|", 1)[-1]: value for key, value in TRANSLATIONS.items()}
+
+
+class FDH(_FDH):
+    def __init__(self, name="dummy", conventionality_residues="ABCDEF", potential_matches=None):
+        super().__init__(name, conventionality_residues, potential_matches or [])
 
 
 def create_motif_residue_mapping(profile):

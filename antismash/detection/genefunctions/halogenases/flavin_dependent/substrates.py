@@ -33,10 +33,8 @@ GENERAL_FDH_PROFILES = [
 
 ALL_FDH_PROFILES = get_full_path(str(Path(__file__).parents[0]), "data", "FDH.hmm")
 
+# all conventional
 GENERAL_FDH_MOTIFS = {
-    "W.W.I.": [206, 207, 208, 209, 210, 211],
-    "F.*P.*S.G": [
-        280, 281, 282, 283, 284, 285, 286, 287, 288, 289, 290, 291, 292, 293,
-        294, 295, 296, 297, 298, 299, 300, 301, 302, 303, 304,
-    ]
+    "W.W.I.": list(range(206, 212)),
+    "F.*P.*S.G": list(range(280, 305)),
 }

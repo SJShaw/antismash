@@ -179,21 +179,18 @@ def categorize_on_substrate_level(cds: CDSFeature, halogenase_match: FlavinDepen
 def categorize_on_consensus_level(cds: CDSFeature, specific_hmm_hits: list[HalogenaseHmmResult],
                                   general_hmm_hits: list[HalogenaseHmmResult],
                                   ) -> FlavinDependentHalogenase:
-    enzyme = FlavinDependentHalogenase(cds.get_name())
+    # determine conventionality
+    conserved_motifs: dict[str, str] = {}
+    for hit in general_hmm_hits:
+        for motif, positions in substrates.GENERAL_FDH_MOTIFS.items():
+            conserved_motif = search_conserved_motif(cds, positions, hit, motif)
+            if conserved_motif:
+                conserved_motifs[motif] = conserved_motif
+
+    enzyme = FlavinDependentHalogenase(cds.get_name(), conventionality_residues=conserved_motifs)
+
     if specific_hmm_hits:
-        enzyme = categorize_on_substrate_level(cds, enzyme, specific_hmm_hits) \
-                    or enzyme
-
-    # if it's not in the specific hits or couldn't be categorized further
-    elif not enzyme.potential_matches:
-        conserved_motifs = {}
-        for hit in general_hmm_hits:
-            for motif, positions in substrates.GENERAL_FDH_MOTIFS.items():
-                conserved_motif = search_conserved_motif(cds, positions, hit, motif)
-                if conserved_motif:
-                    conserved_motifs[motif] = conserved_motif
-
-        enzyme.consensus_residues = conserved_motifs
+        return categorize_on_substrate_level(cds, enzyme, specific_hmm_hits) or enzyme
 
     return enzyme
 

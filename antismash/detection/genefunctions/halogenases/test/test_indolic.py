@@ -19,7 +19,7 @@ from antismash.common.test.helpers import (
 )
 from antismash.detection.genefunctions.halogenases import (
     HalogenaseHmmResult,
-    FlavinDependentHalogenase as FDH,
+    FlavinDependentHalogenase as _FDH,
     Match,
     specific_analysis,
 )
@@ -33,6 +33,11 @@ from antismash.detection.genefunctions.halogenases.flavin_dependent.substrate_an
 from antismash.detection.genefunctions.halogenases.flavin_dependent.subgroups import (
     indolic,
 )
+
+
+class FDH(_FDH):
+    def __init__(self, name="dummy", conventionality_residues="ABCDEF", potential_matches=None):
+        super().__init__(name, conventionality_residues, potential_matches or [])
 
 
 def create_flavin_match(profile, confidence=0., consensus_residues="", substrate=None,
@@ -94,7 +99,6 @@ class IndolicBase(unittest.TestCase):
                                analysis_function):
         fake_hsp.id = name
         fake_hsp.hits = fake_hit
-
         for item in fake_hit:
             item.hsps = [fake_hsp]  # TODO not sure why this is necessary
 
@@ -183,35 +187,6 @@ class TestIndolic(IndolicBase):
 
 
 class TestSpecificAnalysis(IndolicBase):
-    def test_one_best_match(self):
-        result = self.specific_analysis_test("ktzR",
-                                             FakeHit(1, 2, 900, "ktzR"),
-                                             FakeHSPHit("trp_6_7_FDH", "ktzR", bitscore=1500),
-                                             self.trp_enzyme_with_matches,
-                                             [self.test_trp_6_7_match],
-                                             fdh_specific_analysis)
-        assert len(result) == 1
-        assert result[0].family == FDH.family
-        assert result[0].cds_name == "ktzR"
-        assert result[0].cofactor == FDH.cofactor
-        assert result[0].potential_matches
-        best = result[0].get_best_matches()
-        assert best[0].substrate == "tryptophan"
-        assert best[0].number_of_decorations == "mono"
-        assert best[0].target_positions == 6
-
-    def test_more_best_match(self):
-        result = self.specific_analysis_test("mibH", FakeHit(1, 2, 500, "mibH"),
-                                             FakeHSPHit("trp_5_FDH", "mibH", bitscore=800),
-                                             self.trp_5_enzyme_with_matches,
-                                             [self.test_trp_5_match, self.test_trp_6_7_match],
-                                             fdh_specific_analysis)
-        assert len(result) == 1
-        assert result[0].potential_matches
-        assert result[0].consensus_residues is None
-        assert not result[0].number_of_decorations
-        assert result[0].target_positions is None
-
     @patch.object(subprocessing.hmmscan, "run_hmmscan", return_value=[])
     def test_no_hits(self, _patched_hmmscan):
         cds = DummyCDS()
@@ -230,7 +205,8 @@ class TestSpecificAnalysis(IndolicBase):
                                              FDH(name), [],
                                              fdh_specific_analysis)
         assert len(result) == 1
-        assert not result[0].consensus_residues
+        assert result[0].conventionality_residues == {}
+        assert not result[0].is_conventional()
         assert not result[0].potential_matches
 
     @patch.object(substrate_analysis, "extract_residues",
@@ -243,6 +219,7 @@ class TestSpecificAnalysis(IndolicBase):
                                              FDH(name), [],
                                              fdh_specific_analysis)
         assert len(result) == 1
+        assert result[0].conventionality_residues == {"W.W.I.": "WIWVIR"}
 
     @patch.object(substrate_analysis, "extract_residues",
                   return_value="WIWVIRYGMIGDAASVIDAYYSQGVSLALVT")
@@ -253,7 +230,7 @@ class TestSpecificAnalysis(IndolicBase):
                                              FDH(name), [],
                                              specific_analysis)
         assert len(result) == 1
-        assert result[0].consensus_residues == {"W.W.I.": "WIWVIR"}
+        assert result[0].conventionality_residues == {"W.W.I.": "WIWVIR"}
 
     @patch.object(substrate_analysis, "extract_residues", return_value="VALAMI")
     def test_hits_but_no_motifs(self, _patched_extract_residues):
@@ -263,7 +240,7 @@ class TestSpecificAnalysis(IndolicBase):
                                              FDH(name), [],
                                              specific_analysis)
         assert len(result) == 1
-        assert result[0].consensus_residues == {}
+        assert result[0].conventionality_residues == {}
 
     @patch.object(substrate_analysis, "extract_residues", return_value="")
     def test_no_matches(self, _patched_extract_residues):

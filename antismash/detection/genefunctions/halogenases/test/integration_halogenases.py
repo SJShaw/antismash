@@ -33,6 +33,12 @@ class TestHalongenases(unittest.TestCase):
     def get_args(self):
         return ["--minimal", "--enable-genefunctions"]
 
+    def generate_record(self, gene_name):
+        features = [helpers.DummyCDS(locus_tag=gene_name, translation=TRANSLATIONS[gene_name])]
+        record = helpers.DummyRecord(features=features)
+        record.get_cds_features_within_regions = lambda: features
+        return record
+
     def test_multiple(self):
         record = secmet.Record.from_genbank(helpers.get_path_to_balhymicin_genbank())[0]
         # the real halogenase had best be present
@@ -63,3 +69,15 @@ class TestHalongenases(unittest.TestCase):
         assert matches[0].confidence == 1.0
         assert matches[1].profile == "pyrrole_FDH"
         assert matches[1].confidence == 1.0
+
+    def test_non_specific_conventional(self):
+        record = self.generate_record("CtoA")
+        results = halo_analysis(record)
+
+        assert len(results) == 1
+        result = results[0]
+
+        assert result.cds_name == "CtoA"
+        assert not result.potential_matches
+        assert result.conventionality_residues == {"W.W.I.": "WIWVIR"}
+        assert result.is_conventional()

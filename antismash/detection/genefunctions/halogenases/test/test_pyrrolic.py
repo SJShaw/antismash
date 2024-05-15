@@ -10,7 +10,7 @@ from unittest.mock import patch
 from antismash.common.test.helpers import DummyCDS
 from antismash.detection.genefunctions.halogenases import (
     HalogenaseHmmResult,
-    FlavinDependentHalogenase as FDH,
+    FlavinDependentHalogenase as _FDH,
 )
 from antismash.detection.genefunctions.halogenases.flavin_dependent import (
     substrate_analysis,
@@ -21,6 +21,11 @@ from antismash.detection.genefunctions.halogenases.flavin_dependent.substrate_an
 from antismash.detection.genefunctions.halogenases.flavin_dependent.subgroups import (
     pyrrolic,
 )
+
+
+class FDH(_FDH):
+    def __init__(self, name="dummy", conventionality_residues="ABCDEF", potential_matches=None):
+        super().__init__(name, conventionality_residues, potential_matches or [])
 
 
 class TestPyrrolic(unittest.TestCase):

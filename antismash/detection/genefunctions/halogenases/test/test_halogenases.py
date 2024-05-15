@@ -14,7 +14,7 @@ from antismash.common.signature import HmmSignature
 from antismash.common.test.helpers import FakeHSPHit, FakeHit
 from antismash.detection.genefunctions.halogenases import (
     HalogenaseHmmResult,
-    FlavinDependentHalogenase as FDH,
+    FlavinDependentHalogenase as _FDH,
     Match,
 )
 from antismash.detection.genefunctions.halogenases.flavin_dependent import substrate_analysis
@@ -23,6 +23,11 @@ from antismash.detection.genefunctions.halogenases.flavin_dependent.substrate_an
     categorize_on_substrate_level,
     extract_residues,
 )
+
+
+class FDH(_FDH):
+    def __init__(self, name="dummy", conventionality_residues={"dummy": "ABCDEF"}, potential_matches=None):
+        super().__init__(name, conventionality_residues, potential_matches or [])
 
 
 def test_categorisation_with_no_hits():
@@ -84,14 +89,14 @@ def test_run_halogenase_phmms(_patched):
 
 @patch.object(substrate_analysis, "extract_residues",
               return_value="PREFIXWIWVIRYGMIGDAASVIDAYYSQGVSLALVT")
-def test_random(_patched_extract):
+def test_conventional_non_specific(_patched_extract):
     name = "CtoA"
     result = substrate_analysis.categorize_on_consensus_level(
         DummyCDS(locus_tag=name),
         {},
         [HalogenaseHmmResult(name, 200, "all_conventional_FDH", "flavin-dependent")],
     )
-    assert result.consensus_residues == {"W.W.I.": "WIWVIR"}  # is this regex intended to be "starts with"?
+    assert result.conventionality_residues == {"W.W.I.": "WIWVIR"}
     assert not result.potential_matches
 
 

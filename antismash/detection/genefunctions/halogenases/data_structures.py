@@ -39,6 +39,7 @@ class Match:
 @dataclass(slots=True)
 class FlavinDependentHalogenase:
     cds_name: str
+    conventionality_residues: dict[str, str]
     potential_matches: list[Match] = field(default_factory=list)
 
     cofactor: ClassVar[str] = "flavin"
@@ -71,16 +72,16 @@ class FlavinDependentHalogenase:
 
         return best_match
 
+    def is_conventional(self) -> bool:
+        return bool(self.conventionality_residues)
+
     def to_json(self) -> dict[str, Any]:
         """ Constructs a JSON representation of this instance """
-        potential_matches_json = [match.to_json() for match in self.potential_matches]
-
-        return {
-            "cds_name": self.cds_name,
-            "family": self.family,
-            "cofactor": self.cofactor,
-            "potential_matches": potential_matches_json
-        }
+        data = asdict(self)
+        # add class variables not covered by automatic conversion
+        data["cofactor"] = self.cofactor
+        data["family"] = self.family
+        return data
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> Self:
@@ -91,7 +92,7 @@ class FlavinDependentHalogenase:
 
         cds_name = data["cds_name"]
         potential_matches = [Match.from_json(profile) for profile in data["potential_matches"]]
-        return cls(cds_name, potential_matches)
+        return cls(cds_name, data["conventionality_residues"], potential_matches)
 
     def __repr__(self) -> str:
         return f"FlavinDependentHalogenase({self.cds_name=}, {self.confidence=}, {self.potential_matches=})"
@@ -100,7 +101,7 @@ class FlavinDependentHalogenase:
 class HalogenaseHmmResult(HMMResult):
     """ Enzymes identified as a halogenase
 
-        hit_id: name of the matching profile
+        hit_id: name of the query gene
         start: start position within the query's translation
         end: end position within the query's translation
         evalue: e-value of the hit
