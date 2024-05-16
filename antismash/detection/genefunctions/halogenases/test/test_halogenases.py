@@ -12,10 +12,11 @@ from antismash.common import secmet, subprocessing, utils
 from antismash.common.secmet.test.helpers import DummyCDS, DummyRecord
 from antismash.common.signature import HmmSignature
 from antismash.common.test.helpers import FakeHSPHit, FakeHit
-from antismash.detection.genefunctions.halogenases import (
+from antismash.detection.genefunctions.halogenases.data_structures import (
     HalogenaseHmmResult,
     FlavinDependentHalogenase as _FDH,
     Match,
+    MotifDetails,
 )
 from antismash.detection.genefunctions.halogenases.flavin_dependent import substrate_analysis
 from antismash.detection.genefunctions.halogenases.flavin_dependent.substrate_analysis import (
@@ -215,3 +216,53 @@ class TestSpecificAnalysis(BlockHmmer):
         result = self.specific_analysis_test(name, bitscore=200, profile_id="all_general_FDH")
         assert len(result) == 1
         assert result[0].conventionality_residues == {"W.W.I.": "WIWVIR"}
+
+
+class TestDataStructures(unittest.TestCase):
+    def new_via_json(self, item):
+        data = item.to_json()
+        # ensure it's proper json by converting to a string and back
+        data = json.loads(json.dumps(data))
+        new = type(item).from_json(data)
+        assert new.to_json() == data
+        return new
+
+    def test_match_conversion(self):
+        match = Match(profile="dummy_profile", cofactor="some_cofactor", family="a family", confidence=0.2, consensus_residues="MAGIC",
+                      substrate="a substrate", target_positions=(5,7), number_of_decorations="two_or_three_maybe")
+
+        rebuilt = self.new_via_json(match)
+        assert rebuilt == match
+
+    def test_match_equality(self):
+        values = {
+            "profile": "dummy_profile",
+            "cofactor": "some_cofactor",
+            "family": "a family",
+            "confidence": 0.2,
+            "consensus_residues": "MAGIC",
+        }
+
+        match = Match(**values)
+        assert Match(**values) == match
+
+        # and with any modification, equality should fail
+        for key, val in values.items():
+            copy = dict(values)
+            copy[key] = val * 2  # arbitrary, any difference will do
+            assert Match(**copy) != match
+
+    def test_motif_string_equality(self):
+        motif = MotifDetails(name="motif name", positions=(1, 6), residues="MT", substrate="something", decorations="dec")
+        assert motif == "MT" == motif.residues
+
+    def test_motif_class_equality(self):
+        # only the residues are meaningful for comparison
+        residues = "HEY"
+        first = MotifDetails(name="motif name", positions=(1, 2, 6), residues=residues, substrate="something", decorations="dec")
+        different = MotifDetails(name="motif name", positions=(1, 6), residues="ME", substrate="something", decorations="dec")
+        assert first.residues != different.residues
+        assert first != different
+        same = MotifDetails(name="new name", positions=(5, 6, 12), residues=residues, substrate="a", decorations="other")
+        assert first.residues == same.residues
+        assert first == same
