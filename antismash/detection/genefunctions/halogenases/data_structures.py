@@ -11,6 +11,11 @@ from antismash.common.hmmscan_refinement import HMMResult
 from antismash.common.signature import HmmSignature
 
 
+SPECIFIC_BASE_CONFIDENCE = 1.0
+NON_SPECIFIC_BASE_CONFIDENCE = 0.8
+UNCONVENTIONAL_BASE_CONFIDENCE = 0.3
+
+
 @dataclass(slots=True)
 class Match:
     """ Match of the enzyme categorized by check_for_fdh,
@@ -48,8 +53,11 @@ class FlavinDependentHalogenase:
     @property
     def confidence(self) -> float:
         if not self.potential_matches:
-            return 0.
-        return max(match.confidence for match in self.potential_matches)
+            if self.is_conventional():
+                return NON_SPECIFIC_BASE_CONFIDENCE
+            else:
+                return UNCONVENTIONAL_BASE_CONFIDENCE
+        return max(match.confidence for match in self.potential_matches) * SPECIFIC_BASE_CONFIDENCE
 
     def add_potential_matches(self, matches: Iterable[Match]) -> None:
         self.potential_matches.extend(matches)
