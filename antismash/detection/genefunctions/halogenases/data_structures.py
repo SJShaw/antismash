@@ -55,8 +55,8 @@ class FlavinDependentHalogenase:
         if not self.potential_matches:
             if self.is_conventional():
                 return NON_SPECIFIC_BASE_CONFIDENCE
-            else:
-                return UNCONVENTIONAL_BASE_CONFIDENCE
+            return UNCONVENTIONAL_BASE_CONFIDENCE
+        
         return max(match.confidence for match in self.potential_matches) * SPECIFIC_BASE_CONFIDENCE
 
     def add_potential_matches(self, matches: Iterable[Match]) -> None:
@@ -259,6 +259,9 @@ class Profile:
         for motif in self.motifs:
             if retrieved_residues.get(motif.name) == motif:
                 matches.append(self.create_match(confidence, retrieved_residues[motif.name], motif))
+
+        if not matches and self.fallback_profile:
+            matches = self.fallback_profile({}, hit, confidence)
 
         return matches
 

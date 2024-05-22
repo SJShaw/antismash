@@ -38,12 +38,15 @@ SUBGROUPS = [indolic, phenolic, pyrrolic]
 
 
 def _get_substrate_specific_profiles() -> list[HmmSignature]:
-    """ Collects the substrate-specific pHMM profiles from the substrate-specific submodules"""
-    profiles = []
+    """ Collects unique substrate-specific pHMM profiles from the substrate-specific submodules"""
+    profiles = {}
     for submodule in SUBGROUPS:
         for profile in submodule.SPECIFIC_PROFILES:
-            profiles.append(profile)
-    return profiles
+            existing = profiles.get(profile.name)
+            if existing and profile.cutoff >= existing.cutoff:
+                continue
+            profiles[profile.name] = profile
+    return list(profiles.values())
 
 
 def retrieve_fdh_signature_residues(translation: str, hmm_result: HalogenaseHmmResult,
@@ -127,12 +130,16 @@ def run_halogenase_phmms(cluster_fasta: str, profiles: list[HmmSignature],
 
         Arguments:
             cluster_fasta: string of protein sequences in a fasta format
+            profiles: a list of HMM profiles to run
 
         Returns:
-            if there is a hit, it returns the properties of that hit
+            a dictionary mapping query names to a list of hits for that query, one per profile
     """
     halogenase_hmms_by_id: dict = defaultdict(list)
+    files_run = set()  # so that two info sets sharing the same HMM profile aren't reused
     for sig in profiles:
+        if sig.hmm_file in files_run:
+            continue
         run_results = subprocessing.run_hmmsearch(sig.hmm_file, cluster_fasta)
         for runresult in run_results:
             for hsp in runresult.hsps:

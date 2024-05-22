@@ -36,6 +36,7 @@ class TryptophanProfile(Profile):
                 substrate="tryptophan",
             )
             if not check_residues:
+                print(self.description, "adding match", match)
                 matches.append(match)
                 break
 
@@ -43,8 +44,11 @@ class TryptophanProfile(Profile):
                 if retrieved_residues.get(motif.name) != motif:
                     continue
                 match.consensus_residues = motif.residues
+                print(self.description, "adding motif match", match, id(hit))
                 matches.append(match)
             break  # lower cutoffs are irrelevant if a higher is satisfied
+        for match in matches:
+            assert sum(m == match for m in matches) == 1
         return matches
 
 
@@ -72,7 +76,7 @@ TRP_5 = TryptophanProfile(
 )
 
 TRP_6 = TryptophanProfile(
-    description="Tryptophan-6 or -7 halogenase",
+    description="Tryptophan-6 halogenase",
     profile_name="trp_6_7_FDH",
     cutoffs=(770,),
     filename=get_full_path(str(Path(__file__).parents[1]), "data", "trp_6_7_FDH.hmm"),
@@ -81,7 +85,7 @@ TRP_6 = TryptophanProfile(
 )
 
 TRP_7 = TryptophanProfile(
-    description="Tryptophan-6 or -7 halogenase",
+    description="Tryptophan-7 halogenase",
     profile_name="trp_6_7_FDH",
     cutoffs=(770,),
     filename=get_full_path(str(Path(__file__).parents[1]), "data", "trp_6_7_FDH.hmm"),
@@ -95,7 +99,7 @@ SPECIFIC_PROFILES = [variant.profile for variant in VARIANTS]
 
 
 def update_match(retrieved_residues: dict[str, str], halogenase: FlavinDependentHalogenase,
-                 hit: HalogenaseHmmResult) -> None:
+                 hit: HalogenaseHmmResult) -> list[Match]:
     """ Looks whether there are hmm hits that meet the requirement for the categorization
         as Trp-5, Trp-6, or Trp-7 halogenase
 
@@ -114,14 +118,15 @@ def update_match(retrieved_residues: dict[str, str], halogenase: FlavinDependent
     matches = []
     if hit.query_id == "trp_5_FDH":
         matches = TRP_5.get_matches_from_hit(retrieved_residues, hit)
-        assert len(matches) == 1, matches
     elif hit.query_id == "trp_6_7_FDH":
         matches = TRP_6.get_matches_from_hit(retrieved_residues, hit)
-        if not matches:
+        print(hit, matches, retrieved_residues)
+        if not matches and not any(match.target_positions == (6,) and match.substrate == "tryptophan" for match in halogenase.potential_matches):
             matches = TRP_7.get_matches_from_hit(retrieved_residues, hit, check_residues=False)
     else:
         raise ValueError(f"unhandled profile identifier: {hit.query_id}")
     halogenase.add_potential_matches(matches)
+    return matches
 
 
 def get_matching_profiles(hit: HalogenaseHmmResult) -> list[Profile]:
