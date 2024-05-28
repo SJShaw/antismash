@@ -113,7 +113,7 @@ class TestHalongenases(unittest.TestCase):
     def test_tryptophan_6(self):
         result = self.get_single_result("ktzR")
 
-        assert result.confidence == 1.0
+        assert result.confidence == SPECIFIC_BASE_CONFIDENCE
         assert len(result.potential_matches) == 1
         assert result.is_conventional()
 
@@ -124,7 +124,7 @@ class TestHalongenases(unittest.TestCase):
         assert match.target_positions == (6,)
         assert match.number_of_decorations == "mono"
 
-    def test_tryptophan_5(self):
+    def test_tryptophan_5_weak(self):
         result = self.get_single_result("mibH")
 
         assert result.confidence == 0.5
@@ -137,7 +137,20 @@ class TestHalongenases(unittest.TestCase):
         assert match.substrate == "tryptophan"
         assert match.target_positions == (5,)
         assert match.number_of_decorations == "mono"
-        self.fail("this is only a weak hit, where's a strong one?")
+
+    def test_tryptophan_5_stong(self):
+        result = self.get_single_result("SpmH")
+
+        assert result.confidence == 1.
+        assert len(result.potential_matches) == 1
+        assert result.is_conventional()
+
+        match = result.potential_matches[0]
+        assert match.profile == "trp_5_FDH"
+        assert match.confidence == 1.
+        assert match.substrate == "tryptophan"
+        assert match.target_positions == (5,)
+        assert match.number_of_decorations == "mono"
 
     def test_pyrrole_tetra(self):
         result = self.get_single_result("bmp2")
