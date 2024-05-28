@@ -229,7 +229,7 @@ class TestDataStructures(unittest.TestCase):
 
     def test_match_conversion(self):
         match = Match(profile="dummy_profile", cofactor="some_cofactor", family="a family", confidence=0.2, consensus_residues="MAGIC",
-                      substrate="a substrate", target_positions=(5,7), number_of_decorations="two_or_three_maybe")
+                      substrate="a substrate", target_positions=(5, 7), number_of_decorations="two_or_three_maybe")
 
         rebuilt = self.new_via_json(match)
         assert rebuilt == match
