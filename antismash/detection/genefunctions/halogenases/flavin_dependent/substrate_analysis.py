@@ -39,7 +39,7 @@ SUBGROUPS = [indolic, phenolic, pyrrolic]
 
 def _get_substrate_specific_profiles() -> list[HmmSignature]:
     """ Collects unique substrate-specific pHMM profiles from the substrate-specific submodules"""
-    profiles = {}
+    profiles: dict[str, HmmSignature] = {}
     for submodule in SUBGROUPS:
         for profile in submodule.SPECIFIC_PROFILES:
             existing = profiles.get(profile.name)
@@ -65,7 +65,8 @@ def retrieve_fdh_signature_residues(translation: str, hmm_result: HalogenaseHmmR
     """
     signature_residues: dict[str, str] = {}
     for motif in motifs:
-        if not motif.positions:
+        if not motif.positions:  # then it's always present, just 'empty'
+            signature_residues[motif.name] = ""
             continue
         residues = extract_residues(translation, motif.positions, hmm_result)
         if residues:
@@ -140,6 +141,7 @@ def run_halogenase_phmms(cluster_fasta: str, profiles: list[HmmSignature],
     for sig in profiles:
         if sig.hmm_file in files_run:
             continue
+        files_run.add(sig.hmm_file)
         run_results = subprocessing.run_hmmsearch(sig.hmm_file, cluster_fasta)
         for runresult in run_results:
             for hsp in runresult.hsps:
@@ -150,7 +152,7 @@ def run_halogenase_phmms(cluster_fasta: str, profiles: list[HmmSignature],
     return halogenase_hmms_by_id
 
 
-def categorize_on_substrate_level(cds: CDSFeature, halogenase_match: FlavinDependentHalogenase,
+def categorize_on_substrate_level(cds: CDSFeature, halogenase: FlavinDependentHalogenase,
                                   hmm_results: list[HalogenaseHmmResult],
                                   ) -> Optional[FlavinDependentHalogenase]:
     """ Check if protein could be categorized as a Flavin-dependent enzyme
@@ -161,7 +163,7 @@ def categorize_on_substrate_level(cds: CDSFeature, halogenase_match: FlavinDepen
 
         Arguments:
             cds: the CDS feature to categorize
-            halogenase_match: the halogenase instance for the given CDS
+            halogenase: the halogenase instance for the given CDS
             hmm_results: a list of HMM hits for the CDS
 
         Returns:
@@ -176,11 +178,11 @@ def categorize_on_substrate_level(cds: CDSFeature, halogenase_match: FlavinDepen
         for subgroup in SUBGROUPS:
             for profile in subgroup.get_matching_profiles(hit):
                 residues = retrieve_fdh_signature_residues(cds.translation, hit, profile.motifs)
-                if not profile.motifs or residues:
-                    subgroup.update_match(residues, halogenase_match, hit)
-                    matched = True
-
-    return halogenase_match if matched else None
+                matches = profile.get_matches_from_hit(residues, hit)
+                halogenase.add_potential_matches(matches)
+                if matches:
+                    break
+    return halogenase if matched else None
 
 
 def categorize_on_consensus_level(cds: CDSFeature, specific_hmm_hits: list[HalogenaseHmmResult],

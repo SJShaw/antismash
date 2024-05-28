@@ -56,7 +56,7 @@ class FlavinDependentHalogenase:
             if self.is_conventional():
                 return NON_SPECIFIC_BASE_CONFIDENCE
             return UNCONVENTIONAL_BASE_CONFIDENCE
-        
+
         return max(match.confidence for match in self.potential_matches) * SPECIFIC_BASE_CONFIDENCE
 
     def add_potential_matches(self, matches: Iterable[Match]) -> None:
@@ -211,6 +211,7 @@ class Profile:
     motifs: tuple[MotifDetails, ...]
     modification_positions: tuple[int, ...]
 
+    cutoff_step_multiplier: float = 0.5
     # some pre-cached values, since functools.cached_property ruins some documentation
     _motif_mapping: dict[str, MotifDetails] = field(repr=False, default_factory=dict)
     _hmm_profile: Optional[HmmSignature] = field(repr=False, default=None)
@@ -251,35 +252,40 @@ class Profile:
             Returns:
                 a list of matches found
         """
-        matches = []
 
         if hit.bitscore < self.cutoffs[-1]:
             return []
 
+        for cutoff in self.cutoffs:
+            if hit.bitscore >= cutoff:
+                break
+            confidence *= self.cutoff_step_multiplier
+
+        if not self.motifs:
+            return [self.create_match(confidence, "")]
+
+        matches = []
         for motif in self.motifs:
             if retrieved_residues.get(motif.name) == motif:
-                matches.append(self.create_match(confidence, retrieved_residues[motif.name], motif))
-
-        if not matches and self.fallback_profile:
-            matches = self.fallback_profile({}, hit, confidence)
-
+                matches.append(self.create_match(confidence, retrieved_residues[motif.name], motif.substrate, motif.decorations))
         return matches
 
-    def create_match(self, confidence: float, residues: str, motif: MotifDetails) -> Match:
+    def create_match(self, confidence: float, residues: str, substrate: str = "", decorations: str = "") -> Match:
         """ Creates a match instance for the halogenase type.
 
             Arguments:
                 confidence: the confidence of the match
                 residues: the residues of the match, as extracted for the motif
-                motif: the details of the motif that triggered the match
+                substrate: the specific substrate of the match, if any
+                decorations: decoration details, if relevant
 
             Returns:
                 the new match
         """
         return Match(self.profile_name, FlavinDependentHalogenase.cofactor, FlavinDependentHalogenase.family,
                      confidence, residues,
-                     target_positions=self.modification_positions, substrate=motif.substrate,
-                     number_of_decorations=motif.decorations)
+                     target_positions=self.modification_positions, substrate=substrate,
+                     number_of_decorations=decorations)
 
     @property
     def motif_names(self) -> tuple[str, ...]:

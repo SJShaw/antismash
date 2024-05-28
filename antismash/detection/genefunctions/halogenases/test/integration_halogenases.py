@@ -99,9 +99,6 @@ class TestHalongenases(unittest.TestCase):
     def test_tryptophan_7(self):
         result = self.get_single_result("ktzQ")
 
-        self.fail("need some kind of fallback profile system, otherwise it gets two hits")
-
-        print("\n".join(str(match) for match in result.potential_matches))
         assert len(result.potential_matches) == 1
         assert result.is_conventional()
 
