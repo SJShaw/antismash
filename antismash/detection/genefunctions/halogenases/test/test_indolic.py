@@ -7,26 +7,19 @@
 import unittest
 from unittest.mock import patch
 
-from antismash.common import (
-    secmet,
-    subprocessing,
-)
 from antismash.common.test.helpers import (
     DummyCDS,
-    DummyRecord,
 )
 from antismash.detection.genefunctions.halogenases import (
     HalogenaseHmmResult,
     FlavinDependentHalogenase as _FDH,
     Match,
-    specific_analysis,
 )
 from antismash.detection.genefunctions.halogenases.flavin_dependent import (
     substrate_analysis,
 )
 from antismash.detection.genefunctions.halogenases.flavin_dependent.substrate_analysis import (
     categorize_on_substrate_level,
-    fdh_specific_analysis,
 )
 from antismash.detection.genefunctions.halogenases.flavin_dependent.subgroups import (
     indolic,
@@ -96,10 +89,10 @@ class TestIndolic(IndolicBase):
     def test_strong_trp_5(self):
         cds = DummyCDS()
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
-                          return_value={"trp_5_FDH": indolic.TRP_5_MOTIF.residues}) as patched:
+                          return_value=create_motif_residue_mapping(indolic.TRP_5)) as patched:
             categorize_on_substrate_level(DummyCDS(), self.trp_with_no_matches, [self.trp_5_hmm_result])
             patched.assert_called_once_with(
-                cds.translation, self.trp_5_hmm_result, (indolic.TRP_5_MOTIF,),
+                cds.translation, self.trp_5_hmm_result, indolic.TRP_5.motifs,
             )
 
         match = self.trp_with_no_matches.potential_matches[0]
@@ -111,7 +104,7 @@ class TestIndolic(IndolicBase):
 
     def test_weak_trp_5(self):
         with patch.object(substrate_analysis, "retrieve_fdh_signature_residues",
-                          return_value={motif.name: motif.residues for motif in indolic.TRP_5.motifs}):
+                          return_value=create_motif_residue_mapping(indolic.TRP_5)):
             low_quality_hit = HalogenaseHmmResult("trp_5_FDH", 380, "trp_5_FDH", "trp_5_FDH")
             categorize_on_substrate_level(DummyCDS(), self.trp_with_no_matches, [low_quality_hit])
         match = self.trp_with_no_matches.potential_matches[0]
@@ -159,7 +152,7 @@ class TestIndolic(IndolicBase):
         assert result.cds_name == cds.get_name()
         assert result.potential_matches == [
             create_flavin_match(profile="trp_5_FDH", confidence=1.0,
-                                consensus_residues=indolic.TRP_5_MOTIF.residues,
+                                consensus_residues=indolic.TRP_5.motifs[0].residues,
                                 substrate="tryptophan", target_positions=(5,),
                                 number_of_decorations="mono")
         ]
