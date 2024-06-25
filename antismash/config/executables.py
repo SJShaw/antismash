@@ -8,7 +8,7 @@
 import argparse
 from collections import OrderedDict
 import os
-from typing import AnyStr, Dict
+from typing import Any, AnyStr, Dict
 
 
 # since different OS package managers have different ideas on what to name things
@@ -49,6 +49,21 @@ class AlternateExecutablesAction(argparse.Action):  # pylint: disable=too-few-pu
                 setattr(group, name, path)
         except ValueError as err:
             raise argparse.ArgumentError(self, str(err))
+
+
+class ExecutablePaths(argparse.Namespace):
+    __name__ = "ExecutablePaths"  # because of the getattr trickery and instance variables
+
+    def __getattr__(self, key: str) -> Any:
+        if not key.startswith("__") and key not in self.__dict__:
+            path = get_default_paths().get(key)
+            if not path:
+                raise AttributeError(f"no executable found for {key!r}")
+            self.__dict__[key] = path
+        try:
+            return super().__getattr__(key)
+        except AttributeError:
+            return self.__dict__[key]
 
 
 def get_default_paths() -> Dict[str, str]:
