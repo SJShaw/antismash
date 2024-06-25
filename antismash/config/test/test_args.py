@@ -126,10 +126,12 @@ class TestExecutableArg(unittest.TestCase):
         destroy_config()
 
     def test_executables_default(self):
-        options = self.core_parser.parse_args([])
-        assert isinstance(options.executables, Namespace)
-        assert vars(options.executables)
-        assert options.executables.hmmscan
+        with patch.object(executables, "get_default_paths", return_value={"hmmscan": "dummy"}):
+            options = self.core_parser.parse_args([])
+            assert isinstance(options.executables, executables.ExecutablePaths)
+            assert options.executables.hmmscan == "dummy"
+        with self.assertRaisesRegex(AttributeError, "no executable found"):
+            options.executables.not_defined
 
     @patch.object(executables, "find_executable_path")
     def test_executables_override(self, mocked_find):
