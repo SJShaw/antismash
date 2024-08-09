@@ -19,6 +19,7 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
 from antismash.custom_typing import AntismashModule, ConfigType
 
+from . import args
 from .args import build_parser, AntismashParser
 from .loader import load_config_from_file
 
