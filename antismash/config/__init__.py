@@ -203,8 +203,11 @@ def build_config(args: List[str], parser: Optional[AntismashParser] = None, isol
         result.database_dir = databases
         result.cpus = cpus
 
-    # set a base value for the record count limit
-    default.__dict__.update({"triggered_limit": False})
+    # set base values/defaults for options without arguments
+    default.__dict__.update({
+        "triggered_limit": False,
+        "branding": "antiSMASH",
+    })
 
     # then update with all the values from config files
     default.__dict__.update(result.__dict__)
