@@ -24,6 +24,17 @@ from .loader import load_config_from_file
 
 _USER_FILE_NAME = os.path.expanduser('~/.antismash7.cfg')
 _INSTANCE_FILE_NAME = os.path.abspath(os.path.join(os.path.dirname(__file__), 'instance.cfg'))
+_ALTERNATE_DEFAULTS_PATH = ""
+
+
+def set_user_config_file(filename: str) -> None:
+    global _USER_FILE_NAME
+    _USER_FILE_NAME = os.path.expanduser(filename)
+
+
+def set_alternate_defaults_file(filename: str) -> None:
+    global _ALTERNATE_DEFAULTS_PATH
+    _ALTERNATE_DEFAULTS_PATH = filename
 
 
 class Config:  # since it's a glorified namespace, pylint: disable=too-few-public-methods
@@ -137,7 +148,7 @@ def build_config(args: List[str], parser: Optional[AntismashParser] = None, isol
         line
     """
     # load default for static information, e.g. URLs
-    default = load_config_from_file()
+    default = load_config_from_file(_ALTERNATE_DEFAULTS_PATH)
 
     if not parser:
         parser = build_parser(from_config_file=True, modules=modules)
