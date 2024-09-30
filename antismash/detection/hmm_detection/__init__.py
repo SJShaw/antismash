@@ -314,10 +314,10 @@ def prepare_data(logging_only: bool = False) -> List[str]:
         return [str(err)]
 
     # the path to the markov model
-    seeds_hmm = path.get_full_path(__file__, 'data', 'bgc_seeds.hmm')
+    seeds_hmm = HMM_FILE
     hmm_files = [os.path.join("data", sig.hmm_file) for sig in profiles]
     # include the listing, since tools like wget will keep modified timestamps on the HMMs
-    description_file = path.get_full_path(__file__, 'data', 'hmmdetails.txt')
+    description_file = SIGNATURE_FILE
     outdated = False
     if not path.locate_file(seeds_hmm):
         logging.debug("%s: %s doesn't exist, regenerating", NAME, seeds_hmm)
