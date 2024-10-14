@@ -3,17 +3,20 @@
 
 """ Responsible for creating the single web page results """
 
+import abc as abstract
+import dataclasses
 import importlib
 import json
 import pkgutil
 import string
 import os
-from typing import cast, Any, Dict, List, Tuple, Union, Optional
+from typing import cast, Any, Callable, ClassVar, Dict, List, Tuple, Union, Optional
 
 from antismash.common import path
 from antismash.common.html_renderer import (
     FileTemplate,
     HTMLSections,
+    Markup,
     docs_link,
     get_antismash_js_version,
     get_antismash_js_url,
@@ -30,6 +33,105 @@ from antismash.custom_typing import AntismashModule, VisualisationModule
 from .visualisers import gene_table
 
 TEMPLATE_PATH = path.get_full_path(__file__, "templates")
+
+_BUTTON_CLASS = "button-like legend-selector"
+_SYMBOL_CLASS = "legend-symbol"
+_STATIC_CLASS = "legend-selector-static"
+
+
+@dataclasses.dataclass(kw_only=True)
+class LegendBase(abstract.ABC):
+    @abstract.abstractmethod
+    def build_html(self) -> Markup:
+        pass
+
+    def is_relevant(self, results: dict[str, ModuleResults], region: RegionLayer, record: Record,
+                    options: ConfigType) -> bool:
+        return True
+
+
+@dataclasses.dataclass(kw_only=True)
+class LegendSpacer(LegendBase):
+    def build_html(self) -> Markup:
+        return Markup(f'<div style="margin-right: 2em"></div>')
+
+
+@dataclasses.dataclass(kw_only=True)
+class Legend(LegendBase):
+    css_class: str
+    label: str
+    include_css_in_inner: bool = True
+    relevant_when: Callable[[dict[str, ModuleResults], RegionLayer, Record, ConfigType],
+                            bool] = lambda _results, _region, _record, _options: True
+    OUTER_CLASS: ClassVar[str] = _BUTTON_CLASS
+    INNER_CLASS: ClassVar[str] = "legend-field"
+
+    def is_relevant(self, results: dict[str, ModuleResults], region: RegionLayer, record: Record,
+                    options: ConfigType) -> bool:
+        return self.relevant_when(results, region, record, options)
+
+    def _build_core(self) -> Markup:
+        return Markup("")
+
+    def build_html(self) -> Markup:
+        return Markup(
+            f'<div class="{self.OUTER_CLASS}" data-id="{self.css_class}">'
+            f' <div class="{self.INNER_CLASS} {self.css_class if self.include_css_in_inner else ""}">{self._build_core()}</div>'
+            f' <div class="legend-label">{self.label}</div>'
+            "</div>"
+        )
+
+
+@dataclasses.dataclass(kw_only=True)
+class SymbolLegend(Legend):
+    symbol: Markup
+    INNER_CLASS: ClassVar[str] = _SYMBOL_CLASS
+    include_css_in_inner: bool = False
+
+    def _build_core(self) -> Markup:
+        return self.symbol
+
+
+@dataclasses.dataclass(kw_only=True)
+class StaticLegend(Legend):
+    OUTER_CLASS: ClassVar[str] = "legend-selector-static"
+
+
+@dataclasses.dataclass(kw_only=True)
+class StaticSymbolLegend(SymbolLegend, StaticLegend):
+    pass
+
+
+LEGENDS = [
+    Legend(css_class="legend-type-biosynthetic", label="core_biosynthetic genes"),
+    Legend(css_class="legend-type-biosynthetic-additional", label="additional biosynthetic genes"),
+    Legend(css_class="legend-type-transport", label="transport related genes"),
+    Legend(css_class="legend-type-regulatory", label="regulatory genes"),
+    LegendSpacer(),
+    SymbolLegend(css_class="legend-resistance", label="resistance", symbol=Markup(
+        '<svg viewbox="0 0 8 8">'
+        ' <rect x=0 y=2 height=4 width=8 class="svgene-resistance"></rect>'
+        '</svg>'
+    )),
+    SymbolLegend(css_class="legend-tta-codon", label="TTA codons", symbol=Markup(
+            '<svg viewbox="0 0 6 6">'
+            ' <polyline class="svgene-tta-codon" points="3,0 0,6 6,6 3,0">'
+            '</svg>'
+        ), relevant_when=lambda results, _region, record, options: tta.__name__ in results and record.get_gc_content() >= options.tta_threshold,
+    ),
+    SymbolLegend(css_class="legend-binding-site", label="binding site", symbol=Markup(
+            '<svg viewbox="0 -1 8 8">'
+            ' <g class="svgene-binding-site">'
+            '  <line x1="4" y1="8" x2="4" y1="4"></line>'
+            '  <circle cx="4" cy="2" r="2"></circle>'
+            ' </g>'
+            '</svg>'
+        ), relevant_when=lambda results, _region, _record, _options: tfbs.__name__ in results,
+    ),
+    StaticLegend(css_class="legend-border-cassis", label="cluster extent as predicted by CASSIS",
+                 relevant_when=lambda _results, region, _record, _options: region.has_subregion_by_tool("cassis")
+    ),
+]
 
 
 def _get_visualisers() -> List[VisualisationModule]:
@@ -201,7 +303,7 @@ def build_antismash_js_url(options: ConfigType) -> str:
 
 
 def generate_webpage(records: List[Record], results: List[Dict[str, ModuleResults]],
-                     options: ConfigType, all_modules: List[AntismashModule]) -> str:
+                     options: ConfigType, all_modules: List[AntismashModule], legends: list[LegendBase] = LEGENDS) -> str:
     """ Generates the HTML itself """
 
     json_records, js_domains, js_results = build_json_data(records, results, options, all_modules)
@@ -246,7 +348,7 @@ def generate_webpage(records: List[Record], results: List[Dict[str, ModuleResult
                               config=options, job_id=job_id, page_title=page_title,
                               records_without_regions=record_layers_without_regions,
                               svg_tooltip=svg_tooltip, get_region_css=js.get_region_css,
-                              as_js_url=as_js_url, tta_name=tta.__name__, tfbs_name=tfbs.__name__,
+                              as_js_url=as_js_url, legends=legends,
                               )
     return content
 
