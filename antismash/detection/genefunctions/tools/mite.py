@@ -10,7 +10,7 @@ import tempfile
 from typing import Any, Iterable, Optional, Self
 
 from antismash.common import fasta, json, path
-from antismash.common.secmet import GeneFunction, CDSFeature
+from antismash.common.secmet import GeneFunction, CDSFeature, ECGroup
 from antismash.common.subprocessing import diamond
 from antismash.config import ConfigType, get_config
 from antismash.config.args import ModuleArgs
@@ -27,6 +27,7 @@ class MiteEntry:
     accession: str
     description: str
     function: GeneFunction
+    groups: tuple[ECGroup, ...]
     subfunctions: tuple[str, ...]
     version: str
 
@@ -37,6 +38,7 @@ class MiteEntry:
             accession=data["accession"],
             description=data["description"],
             function=GeneFunction.ADDITIONAL,
+            groups=tuple([ECGroup(g) for g in data["groups"]]),
             subfunctions=tuple(data["functions"]),
             version=data["version"],
         )
@@ -197,7 +199,9 @@ def classify(cds_features: Iterable[CDSFeature], options: ConfigType,
             evalue=hit.evalue or 0.,
         ))
     hits_by_cds_name: dict[str, Hit] = {}
-    cds_name_to_function = {}
+    function_mapping = {}
+    group_mapping = {}
+    subfunction_mapping = {}
     for cds_name, blast_hits in blast_hits_by_cds_name.items():
         if not blast_hits:
             continue
@@ -205,10 +209,16 @@ def classify(cds_features: Iterable[CDSFeature], options: ConfigType,
         best = ordered[0]
         entry = dataset.entries[best.reference_id]
         hits_by_cds_name[cds_name] = best
-        cds_name_to_function[cds_name] = entry.function
+        function_mapping[cds_name] = entry.function
+        group_mapping[cds_name] = entry.groups
+        subfunction_mapping[cds_name] = entry.subfunctions
 
-    return Results(tool=TOOL_NAME, best_hits=hits_by_cds_name,
-                   function_mapping=cds_name_to_function, version=dataset.version,
+    return Results(tool=TOOL_NAME,
+                   best_hits=hits_by_cds_name,
+                   function_mapping=function_mapping,
+                   group_mapping=group_mapping,
+                   subfunction_mapping=subfunction_mapping,
+                   version=dataset.version,
                    url=dataset.url)
 
 

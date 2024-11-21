@@ -25,6 +25,36 @@ VERSION_INFO = {
     },
 }
 
+FUNCTION_MAP: dict[str, int] = {
+    "Acetylation": 2,
+    "Acylation": 6,
+    "Amination": 2,
+    "Biaryl bond formation": 6,
+    "Carboxylation": 2,
+    "Cyclization": 1,
+    "Deamination": 3,
+    "Decarboxylation": 4,
+    "Dehydration": 4,
+    "Demethylation": 2,
+    "Deoxygenation": 1,
+    "Monooxygenation": 1,
+    "Dioxygenation": 1,
+    "Epimerization": 5,
+    "Glycosylation": 2,
+    "Halogenation": 2,
+    "Heterocyclization": 1,
+    "Hydrolysis": 3,
+    "Hydroxylation": 1,
+    "Macrocyclization": 6,
+    "Macrolactam formation": 6,
+    "Methylation": 2,
+    "Oxidation": 1,
+    "Phosphorylation": 2,
+    "Prenylation": 2,
+    "Reduction": 1,
+    "Sulfation": 2,
+}
+
 
 def _get_checksum(filename: str, chunk_size: int = 2 ** 20) -> str:
     md5 = hashlib.md5()
@@ -63,10 +93,12 @@ def _convert_json(original: dict[str, Any], schema: str) -> dict[str, Any]:
         functions = set()
         for reaction in original["reactions"]:
             functions.update(reaction["tailoring"])
+        groups = set([FUNCTION_MAP[f] for f in functions if f != "Other"])
         return {
             "accession": original["accession"],
             "description": original["enzyme"]["description"],
             "functions": sorted(functions),
+            "groups": sorted(groups),
             "version": ".".join(map(str, sorted(versions)[-1])),
         }
     raise ValueError(f"unhandled schema version: {schema}")
