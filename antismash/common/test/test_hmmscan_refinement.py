@@ -29,13 +29,13 @@ class TestHMMResult(unittest.TestCase):
             assert result.bitscore == 53.5
 
     def test_length(self):
-        result = refinement.HMMResult("dummy_hit", 1, 5, 3e-10, 53.5, 1, 6)
+        result = refinement.HMMResult("dummy_hit", 1, 5, 3e-10, 53.5, hit_start=1, hit_end=6)
         assert result.query_length == 4
         assert result.hit_length == 5
 
     def test_merge(self):
-        first = refinement.HMMResult("dummy_hit", 1, 5, 3e-10, 53.5, 1, 6)
-        second = refinement.HMMResult("dummy_hit", 15, 25, 3e-20, 73.5, 20, 30)
+        first = refinement.HMMResult("dummy_hit", 1, 5, 3e-10, 53.5, hit_start=1, hit_end=6)
+        second = refinement.HMMResult("dummy_hit", 15, 25, 3e-20, 73.5, hit_start=20, hit_end=30)
         for merged in [first.merge(second), second.merge(first)]:
             assert merged.hit_id == "dummy_hit"
             assert merged.hit_start == 1
@@ -46,8 +46,18 @@ class TestHMMResult(unittest.TestCase):
             assert merged.bitscore == 73.5
 
     def test_json_conversion(self):
+        def compare(regenerated, original):
+            assert regenerated.hit_id == original.hit_id
+            assert regenerated.query_start == original.query_start
+            assert regenerated.query_end == original.query_end
+            assert regenerated.evalue == original.evalue
+            assert regenerated.bitscore == original.bitscore
+            assert regenerated.hit_start == original.hit_start
+            assert regenerated.hit_end == original.hit_end
+
+        # with implicit hit location
         result = refinement.HMMResult("dummy_hit", 1, 5, 3e-10, 53.5)
-        data = result.to_json()
+        data = json.loads(json.dumps(result.to_json()))
         assert data == {'bitscore': 53.5,
                         'evalue': 3e-10,
                         'hit_id': 'dummy_hit',
@@ -56,16 +66,22 @@ class TestHMMResult(unittest.TestCase):
                         'query_end': 5,
                         'query_start': 1}
         regenerated = refinement.HMMResult.from_json(data)
-        assert regenerated.hit_id == "dummy_hit"
-        assert regenerated.query_start == 1
-        assert regenerated.query_end == 5
-        assert regenerated.evalue == 3e-10
-        assert regenerated.bitscore == 53.5
+        compare(regenerated, result)
+
+        # with explicit hit location
+        result = refinement.HMMResult("dummy_hit", 1, 5, 3e-10, 53.5, hit_start=5, hit_end=10)
+        data = json.loads(json.dumps(result.to_json()))
+        assert data["hit_start"] == result.hit_start
+        assert data["hit_end"] == result.hit_end
+        regenerated = refinement.HMMResult.from_json(data)
+        compare(regenerated, result)
 
     def test_str_conversion(self):
-        result = refinement.HMMResult("dummy_hit", 1, 5, 3e-10, 53.5, 1, 6)
-        assert str(result) == "HMMResult(dummy_hit, hit_start=1, hit_end=6, " \
-                              "query_start=1, query_end=5, evalue=3e-10, bitscore=53.5)"
+        result = refinement.HMMResult("dummy_hit", 1, 5, 3e-10, 53.5, hit_start=1, hit_end=6)
+        assert str(result) == (
+            "HMMResult(dummy_hit, hit_start=1, hit_end=6, "
+            "query_start=1, query_end=5, evalue=3e-10, bitscore=53.5)"
+        )
         outer = refinement.HMMResult("other", 1, 5, 3e-10, 53.5, internal_hits=[result])
         assert str(outer).endswith(", subtypes=[dummy_hit])")
 
@@ -95,6 +111,14 @@ class TestHMMResult(unittest.TestCase):
         inner = DummyHMMResult(start=10, end=15)
         assert inner.query_is_contained_by(outer)
         assert not outer.query_is_contained_by(inner)
+        # no overlap at all
+        left = DummyHMMResult(start=5, end=10)
+        right = DummyHMMResult(start=15, end=20)
+        assert not left.query_is_contained_by(right)
+        assert not right.query_is_contained_by(left)
+        # invalid types should be properly caught
+        with self.assertRaises(TypeError):
+            right.query_is_contained_by("invalid")
 
     def test_hit_containment(self):
         outer = DummyHMMResult(hit_start=5, hit_end=20)
@@ -112,6 +136,14 @@ class TestHMMResult(unittest.TestCase):
         inner = DummyHMMResult(hit_start=10, hit_end=15)
         assert inner.hit_is_contained_by(outer)
         assert not outer.hit_is_contained_by(inner)
+        # no overlap at all
+        left = DummyHMMResult(hit_start=5, hit_end=10)
+        right = DummyHMMResult(hit_start=15, hit_end=20)
+        assert not left.hit_is_contained_by(right)
+        assert not right.hit_is_contained_by(left)
+        # invalid types should be properly caught
+        with self.assertRaises(TypeError):
+            right.hit_is_contained_by("invalid")
 
     def test_query_overlaps(self):
         center = DummyHMMResult(start=10, end=20)
@@ -131,6 +163,10 @@ class TestHMMResult(unittest.TestCase):
         # Neigbouring to the right
         floating = DummyHMMResult(start=20, end=30)
         assert not center.query_overlaps_with(floating)
+        assert not floating.query_overlaps_with(center)
+        # invalid types should be properly caught
+        with self.assertRaises(TypeError):
+            center.query_overlaps_with("invalid")
 
     def test_hit_overlaps(self):
         center = DummyHMMResult(hit_start=10, hit_end=20)
@@ -150,6 +186,9 @@ class TestHMMResult(unittest.TestCase):
         # Neigbouring to the right
         floating = DummyHMMResult(hit_start=20, hit_end=30)
         assert not center.hit_overlaps_with(floating)
+        # invalid types should be properly caught
+        with self.assertRaises(TypeError):
+            center.hit_overlaps_with("invalid")
 
     def test_hashability(self):
         first = refinement.HMMResult("dummy_hit", 1, 5, 3e-10, 53.5)
@@ -307,6 +346,8 @@ class TestRefinement(unittest.TestCase):
         assert best.bitscore == 43.5
         assert best.query_start == 91
         assert best.query_end == 390
+        assert best.hit_start == 125
+        assert best.hit_end == 416
 
     def test_preservation_mode(self):
         # Set artificial hmm lengths to better test the merging
@@ -329,10 +370,9 @@ class TestRefinement(unittest.TestCase):
 class TestFragmentMerge(unittest.TestCase):
     def setUp(self):
         self.hmm_lengths = {"dom1": 100, "dom2": 100}
-        self.fragment1 = DummyHMMResult(label="dom1", start=0, end=50, hit_start=0, hit_end=50)
+        self.fragment1 = DummyHMMResult(label="dom1", start=0, end=50, hit_start=25, hit_end=75)
 
     def test_standalone_domains(self):
-        # Standalone domains - no merge
         standalone1 = DummyHMMResult(label="dom1", start=0, end=100, hit_start=0, hit_end=100)
         standalone2 = DummyHMMResult(label="dom1", start=100, end=200, hit_start=0, hit_end=100)
         out = refinement._merge_domain_list([standalone1, standalone2],
@@ -340,50 +380,47 @@ class TestFragmentMerge(unittest.TestCase):
         assert len(out) == 2
 
     def test_fragments(self):
-        # Fragments of the same type - merge
-        fragment2 = DummyHMMResult(label="dom1", start=50, end=100, hit_start=50, hit_end=100)
+        fragment2 = DummyHMMResult(label="dom1", start=50, end=100, hit_start=125, hit_end=175)
         out = refinement._merge_domain_list([self.fragment1, fragment2],
                                             self.hmm_lengths, fragments_mode=True)
         assert len(out) == 1
 
     def test_different_fragments(self):
-        # Fragments of different types - no merge
         fragment_other_dom = DummyHMMResult(label="dom2", start=50, end=100, hit_start=50, hit_end=100)
         out = refinement._merge_domain_list([self.fragment1, fragment_other_dom],
                                             self.hmm_lengths, fragments_mode=True)
         assert len(out) == 2
 
     def test_disordered_fragments(self):
-        # Fragments in wrong order - no merge
-        fragment2 = DummyHMMResult(label="dom1", start=50, end=100, hit_start=50, hit_end=100)
-        out = refinement._merge_domain_list([fragment2, self.fragment1],
+        fragment = DummyHMMResult(label="dom1", start=50, end=100, hit_start=50, hit_end=100)
+        out = refinement._merge_domain_list([fragment, self.fragment1],
                                             self.hmm_lengths, fragments_mode=True)
         assert len(out) == 2
 
     def test_overlapping_fragments(self):
-        # Fragments that overlap just within the allowed overlap - merge
-        fragment3 = DummyHMMResult(label="dom1", start=50, end=100, hit_start=30, hit_end=100)
-        out = refinement._merge_domain_list([self.fragment1, fragment3],
+        fragment = DummyHMMResult(label="dom1", start=50, end=100, hit_start=100, hit_end=150)
+        out = refinement._merge_domain_list([self.fragment1, fragment],
                                             self.hmm_lengths, fragments_mode=True,
                                             allowed_overlap_factor=0.2)
         assert len(out) == 1
         # Fragments that overlap too much - no merge
-        fragment4 = DummyHMMResult(label="dom1", start=50, end=100, hit_start=29, hit_end=100)
-        out = refinement._merge_domain_list([self.fragment1, fragment4],
+        fragment = DummyHMMResult(label="dom1", start=50, end=100, hit_start=29, hit_end=100)
+        out = refinement._merge_domain_list([self.fragment1, fragment],
                                             self.hmm_lengths, fragments_mode=True)
         assert len(out) == 2
 
     def test_many_fragments(self):
-        fragment2 = DummyHMMResult(label="dom1", start=50, end=100, hit_start=50, hit_end=100)
-        standalone2 = DummyHMMResult(label="dom1", start=100, end=200, hit_start=0, hit_end=100)
-        out = refinement._merge_domain_list([self.fragment1, fragment2, standalone2],
+        fragment = DummyHMMResult(label="dom1", start=50, end=100, hit_start=75, hit_end=125)
+        standalone = DummyHMMResult(label="dom1", start=100, end=200, hit_start=0, hit_end=100)
+        print(self.fragment1, fragment, standalone)
+        out = refinement._merge_domain_list([self.fragment1, fragment, standalone],
                                             self.hmm_lengths, fragments_mode=True,
                                             allowed_overlap_factor=0.2)
         assert len(out) == 2
         merged, standalone = out
         assert merged.query_start == 0
         assert merged.query_end == 100
-        assert merged.hit_start == 0
-        assert merged.hit_end == 100
+        assert merged.hit_start == 25
+        assert merged.hit_end == 125
         assert standalone.query_start == 100
         assert standalone.query_end == 200

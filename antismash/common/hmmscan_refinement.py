@@ -5,7 +5,7 @@
 """
 
 from collections import defaultdict
-from typing import Any, Dict, Iterable, List, Set, Tuple, Union
+from typing import Any, Dict, Iterable, List, Self, Set, Tuple, Union
 import logging
 import math
 
@@ -17,12 +17,14 @@ class HMMResult:
     """ A variant of HSP that allows for operations between multiple instances
         along with simplified operations
     """
-    __slots__ = ["_hit_id", "_hit_start", "_hit_end", "_query_start", "_query_end",
-                  "_evalue", "_bitscore", "_internal_hits"]
+    __slots__ = [
+        "_hit_id", "_hit_start", "_hit_end", "_query_start", "_query_end",
+        "_evalue", "_bitscore", "_internal_hits",
+    ]
 
-    def __init__(self, hit_id: str, query_start: int, query_end: int, evalue: float,
-                 bitscore: float, hit_start: int = 1, hit_end: int = 1, *,
-                 internal_hits: Iterable["HMMResult"] = None) -> None:
+    def __init__(self, hit_id: str, query_start: int, query_end: int, evalue: float, bitscore: float,
+                 *, hit_start: int = 1, hit_end: int = 1, internal_hits: Iterable["HMMResult"] = None,
+                 ) -> None:
         self._hit_id = hit_id
         self._hit_start = int(hit_start)
         self._hit_end = int(hit_end)
@@ -105,7 +107,10 @@ class HMMResult:
         self._internal_hits.extend(hits)
 
     def __len__(self) -> int:
-        logging.warning(DeprecationWarning("len(HMMResult) has been replaced by HMMResult.query_length"))
+        logging.warning(DeprecationWarning(
+            "len(HMMResult) is now ambiguous, use the explicit HMMResult.query_length"
+            " or HMMResult.hit_length properties"
+        ))
         return self.query_length
 
     def merge(self, other: "HMMResult") -> "HMMResult":
@@ -118,34 +123,44 @@ class HMMResult:
                          max(self.query_end, other.query_end),
                          min(self.evalue, other.evalue),
                          max(self.bitscore, other.bitscore),
-                         min(self.hit_start, other.hit_start),
-                         max(self.hit_end, other.hit_end),)
+                         hit_start=min(self.hit_start, other.hit_start),
+                         hit_end=max(self.hit_end, other.hit_end),)
 
     def is_contained_by(self, other: "HMMResult") -> bool:
         """ Returns True if this instance is contained within the provided instance """
-        logging.warning(DeprecationWarning("HMMResult.is_contained_by() has been replaced by HMMResult.query_is_contained_by()"))
+        logging.warning(DeprecationWarning(
+            "HMMResult.is_contained_by() is now ambiguous, use the explicit"
+            " HMMResult.query_is_contained_by() or HMMResult.hit_is_contained_by()"
+        ))
+        if not isinstance(other, HMMResult):
+            return False
         return self.query_is_contained_by(other)
 
-    def query_is_contained_by(self, other: "HMMResult") -> bool:
+    def query_is_contained_by(self, other: Self) -> bool:
         """ Returns True if the query region of this instance is contained within
             the query region of the provided instance """
         if not isinstance(other, HMMResult):
-            return False
+            raise TypeError("argument must be of the same type as the class")
         return other.query_start <= self.query_start < self.query_end <= other.query_end
 
-    def hit_is_contained_by(self, other: "HMMResult") -> bool:
+    def hit_is_contained_by(self, other: Self) -> bool:
         """ Returns True if the hit region of this instance is contained within
             the hit region of the provided instance """
         if not isinstance(other, HMMResult):
-            return False
+            raise TypeError("argument must be of the same type as the class")
         return other.hit_start <= self.hit_start < self.hit_end <= other.hit_end
 
     def overlaps_with(self, other: "HMMResult") -> bool:
         """ Returns True if this instance overlaps with the provided instance """
-        logging.warning(DeprecationWarning("HMMResult.overlaps_with() has been replaced by HMMResult.query_overlaps_with()"))
+        logging.warning(DeprecationWarning(
+            "HMMResult.overlaps_with() is now ambiguous, use the explicit"
+            " HMMResult.query_overlaps_with() or HMMResult.hit_overlaps_with()"
+        ))
+        if not isinstance(other, HMMResult):
+            return False
         return self.query_overlaps_with(other)
 
-    def query_overlaps_with(self, other: "HMMResult", min_overlap: int = 1) -> bool:
+    def query_overlaps_with(self, other: Self, min_overlap: int = 1) -> bool:
         """ Returns True if the query region of this instance overlaps with
             the query region of the provided instance,
             and the overlap is equal to or greater than the minimum overlap
@@ -159,11 +174,11 @@ class HMMResult:
                 boolean value
         """
         if not isinstance(other, HMMResult):
-            return False
+            raise TypeError("argument must be of the same type as the class")
         return other.query_end - self.query_start >= min_overlap and \
             self.query_end - other.query_start >= min_overlap
 
-    def hit_overlaps_with(self, other: "HMMResult", min_overlap: int = 1) -> bool:
+    def hit_overlaps_with(self, other: Self, min_overlap: int = 1) -> bool:
         """ Returns True if the hit region of this instance overlaps with
             the hit region of the provided instance,
             and the overlap is equal to or greater than the minimum overlap
@@ -177,7 +192,7 @@ class HMMResult:
                 boolean value
         """
         if not isinstance(other, HMMResult):
-            return False
+            raise TypeError("argument must be of the same type as the class")
         return other.hit_end - self.hit_start >= min_overlap and \
             self.hit_end - other.hit_start >= min_overlap
 
@@ -195,7 +210,8 @@ class HMMResult:
         internal_hits = [HMMResult.from_json(hit) for hit in data.get("internal_hits", [])]
         return HMMResult(str(data["hit_id"]), int(data["query_start"]), int(data["query_end"]),
                          float(data["evalue"]), float(data["bitscore"]),
-                         int(data.get("hit_start", 1)), int(data.get("hit_end", 1)),
+                         # previous JSON data didn't contain hit locations, so set them to defaults
+                         hit_start=int(data.get("hit_start", 1)), hit_end=int(data.get("hit_end", 1)),
                          internal_hits=internal_hits)
 
     def __repr__(self) -> str:
@@ -279,23 +295,24 @@ def remove_incomplete(domains: List[HMMResult], hmm_lengths: Dict[str, int],
     return []
 
 
-def _merge_domain_list(domains: list[HMMResult], hmm_lengths: dict[str, int], *,
+def _merge_domain_list(domains: list[HMMResult], hmm_lengths: dict[str, int],
+                       *,
                        fragments_mode: bool = False, allowed_overlap_factor: float = 0.2,
                        max_span_factor: float = 1.5) -> list[HMMResult]:
     """ Merges domains of the same kind
         In fragments mode, domain fragments are merged when they hit to different
-        consecutive parts of the same profile and they aren't overlapping
+        consecutive parts of the same profile and they aren't overlapping.
         In default mode, domains are always merged except when the resulting domain
-        would become too big
+        would become too big.
 
         Arguments:
             domains: a list of HMMResults
             hmm_lengths: a dictionary mapping hmm id to length
             fragments_mode: if enabled, only merges fragments within the same profile
             allowed_overlap_factor: max allowed overlap for merging, as a factor of the hmm length
-                                (only used in fragments mode)
+                                    (only used in fragments mode)
             max_span_factor: max total domain length, as a factor of the hmm length
-                                (only used in default mode)
+                             (not used in fragments mode)
 
         Returns:
             a list of HMMResults
@@ -309,9 +326,9 @@ def _merge_domain_list(domains: list[HMMResult], hmm_lengths: dict[str, int], *,
         if fragments_mode:
             allowed_overlap = math.floor(allowed_overlap_factor * hmm_lengths[merged.hit_id])
             for other in category[1:]:
-                # If the order of the hits is wrong, or the hit regions overlap; don't merge
-                if (other.hit_start < merged.hit_start or
-                    other.hit_overlaps_with(merged, min_overlap=allowed_overlap+1)):
+                # if the order of the hits is wrong, or the hit regions overlap; don't merge
+                hits_overlap = other.hit_overlaps_with(merged, min_overlap=allowed_overlap + 1)
+                if (other.hit_start < merged.hit_start or hits_overlap):
                     remaining.append(merged)
                     merged = other
                 else:
@@ -355,15 +372,17 @@ def gather_by_query(results: List[HSP]) -> Dict[str, Set[HMMResult]]:
     results_by_id: Dict[str, Set[HMMResult]] = defaultdict(set)
     for result in results:
         for hsp in result.hsps:
-            results_by_id[hsp.query_id].add(HMMResult(hsp.hit_id, hsp.query_start,
-                                                      hsp.query_end, hsp.evalue,
-                                                      hsp.bitscore, hsp.hit_start,
-                                                      hsp.hit_end))
+            results_by_id[hsp.query_id].add(HMMResult(
+                hsp.hit_id, hsp.query_start, hsp.query_end,
+                hsp.evalue, hsp.bitscore,
+                hit_start=hsp.hit_start, hit_end=hsp.hit_end
+            ))
     return results_by_id
 
 
 def refine_hmmscan_results(hmmscan_results: List[QueryResult], hmm_lengths: Dict[str, int],
-                           neighbour_mode: bool = False, preservation_mode: bool = False) -> Dict[str, List[HMMResult]]:
+                           neighbour_mode: bool = False, preservation_mode: bool = False,
+                           ) -> dict[str, list[HMMResult]]:
     """ Processes a list of QueryResult objects (from SearchIO.parse(..., 'hmmer3-text'))
             - merges domain fragments of the same ID
             - keeps only best hits from overlaps
@@ -375,7 +394,7 @@ def refine_hmmscan_results(hmmscan_results: List[QueryResult], hmm_lengths: Dict
             neighbour_mode: if on, does overlap removal before merge and merges
                             only when the next result has the same hit_id
             preservation_mode: if on, merges domains only if they are fragments
-                            of the same type, and doesn't remove any overlaps
+                               of the same type, and doesn't remove any overlaps
 
         Returns:
             a mapping of gene name to list of HMMResults
@@ -390,9 +409,9 @@ def refine_hmmscan_results(hmmscan_results: List[QueryResult], hmm_lengths: Dict
             # Merge domain fragments which are really one domain
             refined = _merge_immediate_neigbours(refined, hmm_lengths)
         elif preservation_mode:
-            # Prefiltering step to remove very small hits
+            # prefiltering step to remove very small hits
             refined = remove_incomplete(refined, hmm_lengths, threshold=0.1, fallback=0.1)
-            # Merging in fragments mode
+            # merging in fragments mode
             refined = _merge_domain_list(refined, hmm_lengths, fragments_mode=True)
         else:
             # Merge domain fragments which are really one domain
