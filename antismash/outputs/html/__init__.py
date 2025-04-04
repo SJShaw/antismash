@@ -22,7 +22,7 @@ from antismash.common.module_results import ModuleResults
 from antismash.common.secmet import Record
 from antismash.custom_typing import AntismashModule
 from antismash.config import ConfigType
-from antismash.config.args import ModuleArgs
+from antismash.config.args import Ambiguous, ModuleArgs
 from antismash.outputs.html.generator import generate_webpage, find_local_antismash_js_path
 
 NAME = "html"
@@ -88,7 +88,9 @@ def check_options(_options: ConfigType) -> List[str]:
 
 def is_enabled(options: ConfigType) -> bool:
     """ Is the HMTL module enabled (currently always enabled) """
-    return options.html_enabled or not options.minimal
+    if options.html_enabled == Ambiguous.DISABLED:
+        return False
+    return not options.minimal
 
 
 def write(records: List[Record], results: List[Dict[str, ModuleResults]],

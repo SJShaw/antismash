@@ -9,6 +9,7 @@
 
 import argparse
 from collections import defaultdict
+import enum
 import multiprocessing
 import os
 from typing import Any, AnyStr, Dict, IO, List, Optional, Set, Tuple, TYPE_CHECKING
@@ -26,6 +27,33 @@ from .executables import AlternateExecutablesAction, get_default_paths
 # not being picked up or argparse's liberal use of *kwargs.
 
 ANTISMASH_VERSION = ""  # needs to be set on module import, avoids cyclic imports
+
+class Ambiguous(enum.Enum):
+    ENABLED = enum.auto()
+    DISABLED = enum.auto()
+    UNKNOWN = enum.auto()
+
+
+class AmbiguousBooleanAction(argparse.Action):
+    def __init__(self, option_strings: list[str], *, default: Any = Ambiguous.UNKNOWN,
+                 metavar: str = None, **kwargs: Any) -> None:
+        if len(option_strings) != 1:
+            raise ValueError("one, and only one, option can be used")
+        opt = option_strings[0].lstrip("-")
+        option_strings = [f"--enable-{opt}", f"--disable-{opt}"]
+        super().__init__(option_strings=option_strings, nargs=0, default=Ambiguous.UNKNOWN, **kwargs)
+
+    def __call__(self, parser: argparse.ArgumentParser, namespace: argparse.Namespace,
+                 values: Any, option_string: str = None) -> None:
+        if not option_string:
+            value = Ambiguous.UNKNOWN
+        elif option_string.startswith("--enable"):
+            value = Ambiguous.ENABLED
+        elif option_string.startswith("--disable"):
+            value = Ambiguous.DISABLED
+        else:
+            raise ValueError(f"unknown/unhandled option prefix: {option_string}")
+        setattr(namespace, self.dest, value)
 
 
 class AntismashParser(argparse.ArgumentParser):
@@ -319,6 +347,7 @@ class _SimpleArgs:
             raise ValueError("Options must have a name")
         option_type = kwargs.get("type")
         default = kwargs.get("default")
+        action = kwargs.get("action")
         if kwargs.get("action") == "store_true" or hasattr(option_type, "__call__"):
             # skip checking of options with no value or options using lambdas
             pass
@@ -355,7 +384,9 @@ class _SimpleArgs:
             Returns:
                 None
         """
-        if kwargs.get("default") is None:
+        if kwargs.get("action") == AmbiguousBooleanAction:
+            pass
+        elif kwargs.get("default") is None:
             raise ValueError("Arguments must have a default, (default=)")
         if not kwargs.get("help"):
             raise ValueError("Arguments must have a help string, (help=)")
@@ -724,10 +755,10 @@ def specific_debugging(modules: Optional[List[AntismashModule]]) -> Optional[Mod
     errors = []
     for module in relevant_modules:
         try:
-            group.add_option(f"--enable-{module.NAME.replace('_', '-')}",
-                             dest=f"{module.NAME}_enabled",
-                             action=argparse.BooleanOptionalAction,
-                             default=False,
+            group.add_option(f"--{module.NAME.replace('_', '-').lower()}",
+                             dest=f"{module.NAME.lower()}_enabled",
+                             action=AmbiguousBooleanAction,
+                             default=Ambiguous.UNKNOWN,
                              help=(f"Enable {module.SHORT_DESCRIPTION}"
                                    " (default: enabled, unless --minimal is specified)"
                                    )
