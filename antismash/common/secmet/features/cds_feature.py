@@ -22,6 +22,7 @@ from ..errors import SecmetInvalidInputError
 from ..locations import (
     AfterPosition,
     BeforePosition,
+    CompoundLocation,
     frameshift_location_by_qualifier,
     Location,
 )
@@ -308,22 +309,26 @@ class CDSFeature(Feature):
 
         location = bio_feature.location
         try:
+            if len(location.parts) > 1:
+                adjusted_location = CompoundLocation(list(location.parts), operator=location.operator)
+            else:
+                adjusted_location = location
+            if location.has_ambiguous_start() and location.has_ambiguous_end():
+                location = location.clone_without_ambiguity(keep_start=False, keep_end=True)
             # before extracting a new translation, ensure that the location used
             # is correctly adjusted to account for a "codon_start" qualifier
             if "codon_start" in leftovers:
-                location = frameshift_location_by_qualifier(location, leftovers["codon_start"][0])
+                adjusted_location = frameshift_location_by_qualifier(location, leftovers["codon_start"][0])
             # ensure that all pseudo genes with ambiguous starts *and* ends are usable
             # by disambiguating one end
-            if location.has_ambiguous_start() and location.has_ambiguous_end():
-                location = location.clone_without_ambiguity(keep_start=False, keep_end=True)
-            _verify_location(location)
+            _verify_location(adjusted_location)
         except Exception as err:
             message = f"invalid location for {name}: {err}"
             raise SecmetInvalidInputError(message) from err
         try:
             translation = leftovers.pop("translation", [""])[0]
             translation = _ensure_valid_translation(translation,
-                                                    location, transl_table, record)
+                                                    adjusted_location, transl_table, record)
         except ValueError as err:
             raise SecmetInvalidInputError(f"{err}: {name}") from err
         feature = cls(location, translation, gene=gene,
