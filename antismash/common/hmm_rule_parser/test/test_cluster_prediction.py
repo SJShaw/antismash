@@ -65,6 +65,40 @@ class TestAncillary(unittest.TestCase):
         # inversely, all genes should have links back to that rule
         assert sorted(cds_to_rules) == sorted(features_by_id)
 
+    def test_with_inner_negated(self):
+        features_by_id = {
+            "a": DummyCDS(218, 1619, locus_tag="a"),
+            "b": DummyCDS(11459, 17011, locus_tag="b"),
+            "c": DummyCDS(17008, 23727, locus_tag="c"),
+            "d": DummyCDS(31687, 33684, locus_tag="d"),
+        }
+        rule_text = """
+RULE test_rule
+    CATEGORY category
+    CUTOFF 30
+    NEIGHBOURHOOD 20
+    CONDITIONS A or (X and not (B or Y))
+"""
+        features = list(features_by_id.values())
+        record = DummyRecord(features)
+
+        results_by_id = {
+            "a": [FakeHSPHit("A", "a", 0, 10, 50, 0)],
+            "b": [FakeHSPHit("B", "b", 0, 10, 50, 0)],
+            "c": [FakeHSPHit("B", "c", 0, 10, 50, 0)],
+            "d": [FakeHSPHit("D", "d", 0, 10, 50, 0)],
+        }
+        signature_names = set("ABCDXY")
+        rules = rule_parser.Parser(rule_text, signature_names, {"category"}).rules
+
+        cds_to_rules, rules_to_cds = cluster_prediction.apply_cluster_rules(record, results_by_id, rules)
+        print(cds_to_rules)
+        print(rules_to_cds)
+
+        assert len(rules_to_cds) == 1  # only one rule exists
+        assert "b" not in rules_to_cds["test_rule"]  # b is an explicit negative, it should never be core
+        self.fail()
+
 
 class TestRedundancy(unittest.TestCase):
     def setUp(self):
