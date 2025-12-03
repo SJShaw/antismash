@@ -795,7 +795,7 @@ def apply_cluster_rules(record: Record, results_by_id: Dict[str, List[ProfileHit
             nearby_features, nearby_results = info_by_range[rule.cutoff]
             matching = rule.detect(cds_name, nearby_features, nearby_results, circular_origin=circular_origin)
             present = {name for name, negation in matching.presence_and_negation.items() if negation}
-            print(f" while marking rule {matching.met=}, {matching.matches=}, {present=}")
+            print(f" while marking rule in {cds_name=} {matching.met=}, {matching.matches=}, {present=}")
             if matching.met and present:
                 print("  good, with matches:", present)
                 cds_domains_by_cluster_type[cds_name][rule.name].update(present)

@@ -482,7 +482,7 @@ class Conditions:
         ancillary_hits: Dict[str, Set[str]] = defaultdict(set)
         final_result = ConditionMet(met, set(), ancillary_hits)
         for operand, sub_result in zip(self.operands, sub_results):
-            final_result = final_result.merge(sub_result)
+            final_result = final_result.merge(sub_result, require_all=False)
             continue
             matching |= sub_result.matches
             met |= sub_result.met
@@ -572,7 +572,7 @@ class AndCondition(Conditions):
                 for name, anc_hits in result.ancillary_hits.items():
                     print(" updating with", anc_hits)
                     ancillary_hits[name].update(anc_hits)
-        print(self, self.get_hit_string())
+        print(f"'{self}'", self.get_hit_string())
         return final_result
         return ConditionMet(met, matched, ancillary_hits)
 
@@ -720,7 +720,7 @@ class SingleCondition(Conditions):
         negation = {self.name: NegationState(negated=False, present=self.name in set(details.possibilities))}  # TODO: what in the performance?
         # do we only care about this CDS? then use the smaller set
         if local_only or found_in_cds:
-            print("here", negation, self.negated, found_in_cds)
+            print(f"SingleCondition good={xor(self.negated, found_in_cds)}, {negation=}, {self.negated=}, {found_in_cds=}")
             return ConditionMet(xor(self.negated, found_in_cds), negated=self.negated, presence_and_negation=negation)
 
         cds_feature = details.features_by_id[details.cds]

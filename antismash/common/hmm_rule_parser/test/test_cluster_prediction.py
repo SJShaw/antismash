@@ -95,8 +95,8 @@ RULE test_rule
         rules = rule_parser.Parser(rule_text, signature_names, {"category"}).rules
 
         cds_to_rules, rules_to_cds = cluster_prediction.apply_cluster_rules(record, results_by_id, rules)
-        print(cds_to_rules)
-        print(rules_to_cds)
+        print("test: cds to rules", cds_to_rules)
+        print("test: rules to cds", rules_to_cds)
 
         print(str(rules[0].conditions)[1:-1])
         assert len(rules_to_cds) == 1  # only one rule exists
