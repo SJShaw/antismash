@@ -414,7 +414,7 @@ RULE proteusin
     CONDITIONS PoyD          # polytheonamide-like rSAM
                or TIGR03793  # nitrile hydratase-like leader peptide
 
-DEFINE rSAM_with_SPASM AS cds(PF04055 and (TIGR04085 or SPASM))
+DEFINE rSAM_with_SPASM AS (cds(PF04055 and (TIGR04085 or SPASM)) or PTHR43273)
 
 DEFINE ANY_RRE AS minimum(1,
    [Lanthipeptide_LanB_RRE, Stand_Alone_Lasso_RRE, Lasso_Fused_RRE, Thiopeptide_F_RRE, PqqD_RRE,

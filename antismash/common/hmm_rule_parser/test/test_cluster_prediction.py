@@ -65,28 +65,31 @@ class TestAncillary(unittest.TestCase):
         # inversely, all genes should have links back to that rule
         assert sorted(cds_to_rules) == sorted(features_by_id)
 
-    def test_with_inner_negated(self):
+    def test_with_negated(self):
         features_by_id = {
-            "a": DummyCDS(218, 1619, locus_tag="a"),
-            "b": DummyCDS(11459, 17011, locus_tag="b"),
-            "c": DummyCDS(17008, 23727, locus_tag="c"),
-            "d": DummyCDS(31687, 33684, locus_tag="d"),
+            "a": DummyCDS(100, 400, locus_tag="a"),
+            "b": DummyCDS(500, 800, locus_tag="b"),
         }
         rule_text = """
 RULE test_rule
     CATEGORY category
-    CUTOFF 30
-    NEIGHBOURHOOD 20
-    CONDITIONS A or (X and not (B or Y))
+    CUTOFF 1
+    NEIGHBOURHOOD 1
+    CONDITIONS A or X and not B
 """
+#    A and not transAT
+# also problematic and needs fixing:    CONDITIONS A or (X and not B)
+#    CONDITIONS A or not (not X and B)
+# another one, ranthipeptide and NZ_NVJM01000012.1 - Region 1 
+# unaffected: A or cds(X and not B)
+
+# what about A or not (not X and B)?
         features = list(features_by_id.values())
         record = DummyRecord(features)
 
         results_by_id = {
             "a": [FakeHSPHit("A", "a", 0, 10, 50, 0)],
             "b": [FakeHSPHit("B", "b", 0, 10, 50, 0)],
-            "c": [FakeHSPHit("B", "c", 0, 10, 50, 0)],
-            "d": [FakeHSPHit("D", "d", 0, 10, 50, 0)],
         }
         signature_names = set("ABCDXY")
         rules = rule_parser.Parser(rule_text, signature_names, {"category"}).rules
@@ -95,9 +98,84 @@ RULE test_rule
         print(cds_to_rules)
         print(rules_to_cds)
 
+        print(str(rules[0].conditions)[1:-1])
         assert len(rules_to_cds) == 1  # only one rule exists
-        assert "b" not in rules_to_cds["test_rule"]  # b is an explicit negative, it should never be core
-        self.fail()
+        assert "b" not in rules_to_cds["test_rule"]
+        self.fail("success?")
+
+    def test_mixed_negation(self):
+        features_by_id = {name: DummyCDS(500 + i, 800, locus_tag=name) for i, name in enumerate("ab")}
+        rule_text = """
+RULE test_rule
+    CATEGORY category
+    CUTOFF 1
+    NEIGHBOURHOOD 1
+    CONDITIONS A or (X and not B) or (B and not Y)
+"""
+        features = list(features_by_id.values())
+        record = DummyRecord(features)
+
+        results_by_id = {name: [FakeHSPHit(name.upper(), name, 0, 10, 50, 0)] for name in "ab"}
+        signature_names = set("ABXY")
+        rules = rule_parser.Parser(rule_text, signature_names, {"category"}).rules
+
+        cds_to_rules, rules_to_cds = cluster_prediction.apply_cluster_rules(record, results_by_id, rules)
+        print(cds_to_rules)
+        print(rules_to_cds)
+
+        print(str(rules[0].conditions)[1:-1])
+        assert len(rules_to_cds) == 1  # only one rule exists
+        assert "b" in rules_to_cds["test_rule"]
+        self.fail("success?")
+
+    def test_nested_negation(self):
+        features_by_id = {name: DummyCDS(500 + i, 800, locus_tag=name) for i, name in enumerate("ab")}
+        rule_text = """
+RULE test_rule
+    CATEGORY category
+    CUTOFF 1
+    NEIGHBOURHOOD 1
+    CONDITIONS A or not (X and not B)
+"""
+        features = list(features_by_id.values())
+        record = DummyRecord(features)
+
+        results_by_id = {name: [FakeHSPHit(name.upper(), name, 0, 10, 50, 0)] for name in "ab"}
+        signature_names = set("ABXY")
+        rules = rule_parser.Parser(rule_text, signature_names, {"category"}).rules
+
+        cds_to_rules, rules_to_cds = cluster_prediction.apply_cluster_rules(record, results_by_id, rules)
+        print(cds_to_rules)
+        print(rules_to_cds)
+
+        print(str(rules[0].conditions)[1:-1])
+        assert len(rules_to_cds) == 1  # only one rule exists
+        assert "b" in rules_to_cds["test_rule"]
+        self.fail("success?")
+
+    def test_simplest_case(self):
+        features_by_id = {name: DummyCDS(500 + i, 800, locus_tag=name) for i, name in enumerate("ab")}
+        rule_text = """
+RULE test_rule
+    CATEGORY category
+    CUTOFF 1
+    NEIGHBOURHOOD 1
+    CONDITIONS A
+"""
+        features = list(features_by_id.values())
+        record = DummyRecord(features)
+
+        results_by_id = {name: [FakeHSPHit(name.upper(), name, 0, 10, 50, 0)] for name in "a"}
+        signature_names = set("A")
+        rules = rule_parser.Parser(rule_text, signature_names, {"category"}).rules
+
+        cds_to_rules, rules_to_cds = cluster_prediction.apply_cluster_rules(record, results_by_id, rules)
+        print(cds_to_rules)
+        print(rules_to_cds)
+
+        print(str(rules[0].conditions)[1:-1])
+        assert len(rules_to_cds) == 1  # only one rule exists
+        assert rules_to_cds == {"test_rule": {"a"}}
 
 
 class TestRedundancy(unittest.TestCase):

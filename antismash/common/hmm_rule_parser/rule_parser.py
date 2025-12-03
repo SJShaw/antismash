@@ -183,12 +183,13 @@ from collections import defaultdict
 from enum import IntEnum
 from operator import xor  # so type hints can be bool and not int
 import string
-from typing import Any, Dict, List, Optional, Set, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Set, Self, Tuple, Type, Union
 
 from antismash.common.secmet import CDSFeature, FeatureLocation
 from antismash.common.secmet.locations import get_distance_between_locations
 
 from .structures import Multipliers, ProfileHit
+from .helpers import ConditionMet, NegationState
 
 
 class RuleSyntaxError(SyntaxError):
@@ -410,33 +411,6 @@ class Details:
         return f"Details(cds={self.cds}, possibilities={self.possibilities})"
 
 
-class ConditionMet:
-    """ A container for tracking whether a condition was satisfied along with
-        what specific subsections of the condition were matched
-    """
-    def __init__(self, met: bool, matches: Union[Set, "ConditionMet"] = None,
-                 ancillary_hits: Dict[str, Set[str]] = None) -> None:
-        assert isinstance(met, bool)
-        self.met = met
-        self.matches: Set[str] = set()
-        self.ancillary_hits = ancillary_hits or defaultdict(set)
-        if isinstance(matches, ConditionMet):
-            self.matches = matches.matches
-        elif matches:
-            self.matches = matches
-        assert isinstance(self.matches, set), type(matches)
-
-    def __bool__(self) -> bool:
-        return self.met
-
-    def __str__(self) -> str:
-        return (
-            f"satisfied: {self.met}"
-            f", with hits: {self.matches or 'none'}"
-            f" and with others: {self.ancillary_hits or 'none'}"
-        )
-
-
 class Conditions:
     """ The base condition case. Can, and probably will, contain sub conditions
         (e.g. (a and b or c) style groups).
@@ -469,6 +443,8 @@ class Conditions:
             if operand in unique_operands:
                 raise ValueError(f"Rule contains repeated condition: {operand}\nfrom rule {self}")
             unique_operands.add(operand)
+        typename = str(type(self)).rsplit(".", 1)[-1].split("'")[0].upper()
+        print(f"{typename}, {self}, {negated=}, {self._operands=}, {self._operators=}")
 
     @property
     def operands(self) -> List["Conditions"]:
@@ -504,12 +480,17 @@ class Conditions:
         matching: Set[str] = set()
         met = False
         ancillary_hits: Dict[str, Set[str]] = defaultdict(set)
-        for sub_result in sub_results:
+        final_result = ConditionMet(met, set(), ancillary_hits)
+        for operand, sub_result in zip(self.operands, sub_results):
+            final_result = final_result.merge(sub_result)
+            continue
             matching |= sub_result.matches
             met |= sub_result.met
+            if operand.negated and not sub_result.met:
+                continue
             for name, anc_hits in sub_result.ancillary_hits.items():
                 ancillary_hits[name].update(anc_hits)
-        return ConditionMet(met, matching, ancillary_hits)
+        return final_result
 
     def get_satisfied(self, details: Details, local_only: bool = False) -> ConditionMet:
         """ Increments hit counter if satisfied and returns whether or not all
@@ -525,7 +506,10 @@ class Conditions:
             Should be overridden in subclasses to suit their specific case.
         """
         subs = self.are_subconditions_satisfied(details, local_only)
-        return ConditionMet(xor(self.negated, subs.met), subs, subs.ancillary_hits)
+        if self.negated:
+            subs = subs.as_negated()
+        print(f" conditions.is_satisfied(), {subs=}")
+        return subs
 
     def get_hit_string(self) -> str:
         """ Returns a string representation of the condition marking how many
@@ -575,11 +559,21 @@ class AndCondition(Conditions):
         matched: Set[str] = set()
         met = True
         ancillary_hits: Dict[str, Set[str]] = defaultdict(set)
-        for result in results:
+        final_result = ConditionMet(True, set(), ancillary_hits, negated=self.negated)
+        for op, result in zip(self.operands, results):
+            final_result = final_result.merge(result)
+            continue
+            print("AND", op, result) 
             matched |= result.matches
             met = met and result.met
-            for name, anc_hits in result.ancillary_hits.items():
-                ancillary_hits[name].update(anc_hits)
+            if not result.met:
+                continue
+            if not (op.negated and isinstance(op, SingleCondition)):
+                for name, anc_hits in result.ancillary_hits.items():
+                    print(" updating with", anc_hits)
+                    ancillary_hits[name].update(anc_hits)
+        print(self, self.get_hit_string())
+        return final_result
         return ConditionMet(met, matched, ancillary_hits)
 
     def get_hit_string(self) -> str:
@@ -723,14 +717,11 @@ class SingleCondition(Conditions):
 
     def is_satisfied(self, details: Details, local_only: bool = False) -> ConditionMet:
         found_in_cds = self.name in details.possibilities
+        negation = {self.name: NegationState(negated=False, present=self.name in set(details.possibilities))}  # TODO: what in the performance?
         # do we only care about this CDS? then use the smaller set
         if local_only or found_in_cds:
-            return ConditionMet(xor(self.negated, found_in_cds), {self.name}.intersection(set(details.possibilities)))
-
-        # we found all we were looking for, or we aren't allowed to look further
-        if found_in_cds:
-            cond = ConditionMet(xor(self.negated, found_in_cds), set([self.name]))
-            return cond
+            print("here", negation, self.negated, found_in_cds)
+            return ConditionMet(xor(self.negated, found_in_cds), negated=self.negated, presence_and_negation=negation)
 
         cds_feature = details.features_by_id[details.cds]
         # look at neighbours in range
@@ -743,12 +734,15 @@ class SingleCondition(Conditions):
                 continue
             other_possibilities = [res.query_id for res in other_hits]
             if self.name in other_possibilities:
-                ancillary[other] = {self.name}
+                if not self.negated:
+                    ancillary[other] = {self.name}
+                else:
+                    negation[self.name] = negation.get(self.name, NegationState(present=True))
         if ancillary:
-            return ConditionMet(not self.negated, ancillary_hits=ancillary)
+            return ConditionMet(not self.negated, ancillary_hits=ancillary, presence_and_negation=negation, negated=self.negated)
 
         # if negated and we failed to find anything, that's a good thing
-        return ConditionMet(self.negated)
+        return ConditionMet(self.negated, negated=self.negated, presence_and_negation=negation)
 
     @property
     def profiles(self) -> Set[str]:
@@ -756,7 +750,7 @@ class SingleCondition(Conditions):
 
     def get_hit_string(self) -> str:
         if self.negated:
-            return f"{self.hits}*({self.name})"
+            return f"{self.hits}*(not {self.name})"
         return f"{self.hits}*{self.name}"
 
     def __str__(self) -> str:
