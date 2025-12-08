@@ -438,6 +438,19 @@ class Conditions:
             assert sub in [TokenTypes.AND, TokenTypes.OR]
             self._operators.append(sub)
 
+        top_level_or_error = "Rules cannot contain an OR condition that is negated"
+
+        if self._operands and self._operators:
+            if self._operands[0].negated and self._operators[0] == TokenTypes.OR:
+                raise ValueError(f"{top_level_or_error}: '{self._operands[0]}'")
+
+            if len(self._operands) > 1 and self._operands[-1].negated and self._operators[-1] == TokenTypes.OR:
+                raise ValueError(f"{top_level_or_error}: '{self._operands[-1]}'")
+
+            for i, sub in enumerate(self._operands[1:-1]):
+                if sub.negated and self._operators[i - 1] == TokenTypes.OR and self._operators[i + 1] == TokenTypes.OR:
+                    raise ValueError(f"{top_level_or_error}: '{self._operands[0]}'")
+
         unique_operands: Set[str] = set()
         for operand in map(str, self.operands):
             if operand in unique_operands:
