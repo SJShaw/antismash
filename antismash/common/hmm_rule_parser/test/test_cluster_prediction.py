@@ -101,7 +101,6 @@ RULE test_rule
         print(str(rules[0].conditions)[1:-1])
         assert len(rules_to_cds) == 1  # only one rule exists
         assert "b" not in rules_to_cds["test_rule"]
-        self.fail("success?")
 
     def test_mixed_negation(self):
         features_by_id = {name: DummyCDS(500 + i, 800, locus_tag=name) for i, name in enumerate("ab")}
@@ -126,7 +125,6 @@ RULE test_rule
         print(str(rules[0].conditions)[1:-1])
         assert len(rules_to_cds) == 1  # only one rule exists
         assert "b" in rules_to_cds["test_rule"]
-        self.fail("success?")
 
     def test_nested_negation(self):
         features_by_id = {name: DummyCDS(500 + i, 800, locus_tag=name) for i, name in enumerate("ab")}
@@ -141,7 +139,7 @@ RULE test_rule
         record = DummyRecord(features)
 
         results_by_id = {name: [FakeHSPHit(name.upper(), name, 0, 10, 50, 0)] for name in "ab"}
-        signature_names = set("ABXY")
+        signature_names = set("ABX")
         rules = rule_parser.Parser(rule_text, signature_names, {"category"}).rules
 
         cds_to_rules, rules_to_cds = cluster_prediction.apply_cluster_rules(record, results_by_id, rules)
@@ -150,8 +148,7 @@ RULE test_rule
 
         print(str(rules[0].conditions)[1:-1])
         assert len(rules_to_cds) == 1  # only one rule exists
-        assert "b" in rules_to_cds["test_rule"]
-        self.fail("success?")
+        assert rules_to_cds["test_rule"] == {"a", "b"}
 
     def test_simplest_case(self):
         features_by_id = {name: DummyCDS(500 + i, 800, locus_tag=name) for i, name in enumerate("ab")}

@@ -56,16 +56,22 @@ class DetectionTest(unittest.TestCase):
             rule_results = []
             for rule in rules:
                 result = rule.detect(cds, self.feature_by_id, self.results_by_id)
-                if not result or not result.matches:
+                print(f"\n\nTEST RESULTS for {rule.conditions} anchoring at {cds}\n")
+                print(result)
+                if not result:
+                    print("SKIPPING", cds, "\n")
                     continue
+                print("GOOD MATCH FOR", cds)
+                print()
                 rule_results.append(result)
                 # check that we have something interesting to report
                 hit_string = rule.get_hit_string().replace("0*", "")
                 assert "*" in hit_string, str(result)
 
-                if result.met and result.matches:
-                    detected_types[cds].add(rule.name)
-                    for other_cds in result.ancillary_hits:
+                detected_types[cds].add(rule.name)
+                for other_cds, presences in result.matches_in_neighbours.items():
+                    print(f"other: {other_cds}:\n{presences}")
+                    if presences.get_positives():
                         detected_types[other_cds].add(rule.name)
 
         return detected_types
@@ -304,7 +310,7 @@ class RuleParserTest(unittest.TestCase):
             self.parse(format_as_rule("A", 10, 20, "badname or a"))
 
     def test_stringify(self):
-        rule_lines = [format_as_rule(*args) for args in [["abc", 10, 20, "a and b or not (c and d)"],
+        rule_lines = [format_as_rule(*args) for args in [["abc", 10, 20, "a and b and not (c or d)"],
                                                          ["def", 7, 30, "minimum(3, [a, b, other]) and more"],
                                                          ["fgh", 15, 20, "c and not cds(a and b)"]]]
         rules = self.parse("\n".join(rule_lines)).rules
@@ -592,7 +598,7 @@ class RuleParserTest(unittest.TestCase):
 
     def test_or_no_positive(self):
         rules = format_as_rule("A", 10, 10, "not a or not c")
-        with self.assertRaisesRegex(ValueError, "at least one positive requirement"):
+        with self.assertRaisesRegex(ValueError, "OR condition that is negated"):
             self.parse(rules)
 
     def test_cds_no_positive(self):
@@ -617,7 +623,7 @@ class RuleParserTest(unittest.TestCase):
     def test_deep_no_positive(self):
         for rule in ["(not a) and (not b)", "not (a and b)",
                      "not a or (not b and not (c or d))"]:
-            with self.assertRaisesRegex(ValueError, "at least one positive requirement"):
+            with self.assertRaisesRegex(ValueError, "OR condition that is negated|at least one positive requirement"):
                 self.parse(format_as_rule("A", 10, 10, rule))
 
     def test_alias_simple(self):
