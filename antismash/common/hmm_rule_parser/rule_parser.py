@@ -582,6 +582,9 @@ class AndCondition(Conditions):
             print("  ", res)
         for op, result in zip(self.operands, results):
             final_result = final_result.merge(result.copy(negate=self.negated))
+        if local_only:
+            sub_satisfaction = [sub.satisfied for sub in results]
+            print("BEEP BOOP: ", sub_satisfaction)
         print(f"'{self}'", self.get_hit_string(), "final result", final_result)
         return final_result
 
@@ -692,6 +695,7 @@ class CDSCondition(Conditions):
         # so we force local_only to True
         satisfied_internally = super().are_subconditions_satisfied(details.just_cds(details.cds),
                                                                    local_only=True)
+        print("  CDS CONDITION:", details.cds, self)
         # start with the current cds (and end if local_only or satisifed)
         if local_only or satisfied_internally:
             print("this one here?", self, satisfied_internally, details.cds, "res", xor(self.negated, satisfied_internally.met))
@@ -720,7 +724,8 @@ class SingleCondition(Conditions):
         found_in_neighbours = False
         neighbours = {}
         print(f"   checking single: {self.name} in anchor {details.cds}? {found_in_cds}")
-        for other, value in details.get_results_in_range().items():
+        items = [] if local_only else details.get_results_in_range().items()
+        for other, value in items:
             if other == details.cds:
                 continue
             present = any(res.query_id == self.name for res in value)
