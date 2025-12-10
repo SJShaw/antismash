@@ -86,6 +86,10 @@ class PresenceAbsence:
         for key, val in self.states.items():
             yield key, val
 
+    def values(self) -> Iterator[Presence]:
+        for val in self.states.values():
+            yield val
+
     def merge(self, other: Self) -> Self:
         result = self.copy()
         for key, val in other.items():
@@ -97,6 +101,9 @@ class PresenceAbsence:
 
     def get_positives(self) -> set[str]:
         return {key for key, val in self.items() if val}
+
+    def get_negatives(self) -> set[str]:
+        return {key for key, val in self.items() if val.present and val.state != State.NORMAL}
 
     def __repr__(self) -> str:
         return str(self)
@@ -112,40 +119,83 @@ class ConditionSatisfaction:
     """ A container for tracking whether a condition was satisfied along with
         what specific subsections of the condition were matched
     """
-    def __init__(self, satisfied: bool, anchor: str,
-                 matches_in_anchor: PresenceAbsence = None,
+    def __init__(self, anchor: str,
                  *,
+                 matches_in_anchor: PresenceAbsence = None,
+                 satisfied: bool = None, 
                  matches_in_neighbours: dict[str, PresenceAbsence] | None = None,
                  negated: bool = False,
                  ) -> None:
-        self.satisfied = satisfied
+        self._satisfied = satisfied
         self.anchor = anchor
         self.negated = negated
         self.matches_in_anchor = matches_in_anchor if matches_in_anchor else PresenceAbsence()
         self.matches_in_neighbours = matches_in_neighbours or {}
 
     @property
+    def satisfied(self) -> bool:
+        # TODO: this bit sucks, it's needed for AND, but breaks OR... and vice versa
+        if self._satisfied is not None:
+            print("A")
+            return self._satisfied
+        if self.matches_in_anchor.get_negatives():
+            print("B")
+            return False
+        if any(matches.get_negatives() for matches in self.matches_in_neighbours.values()):
+            print("C")
+            return False
+#        if not self.positive_matches_in_anchor:
+#            print("D")
+#            return self.negated
+        print("E")
+        return len(self.positive_matches) > 0
+
+    @property
     def positive_matches_in_anchor(self) -> set[str]:
         return self.matches_in_anchor.get_positives()
 
-    def merge(self, other: Self) -> Self:
+    @property
+    def positive_matches_in_neighbours(self) -> set[str]:
+        matches = set()
+        for val in self.ancillary_hits.values():
+            matches.update(val)
+        return matches
+
+    @property
+    def positive_matches(self) -> set[str]:
+        return self.positive_matches_in_anchor.union(self.positive_matches_in_neighbours)
+
+    def has_any_negative_matches(self) -> bool:
+        if self.matches_in_anchor.get_negatives():
+            return True
+        if any(val.get_negatives() for val in self.matches_in_neighbours.values()):
+            return True
+        return False
+
+    def merge(self, other: Self, require_both: bool = True) -> Self:
+        assert other is not self
         assert self.anchor == other.anchor
 
         anchor_matches = self.matches_in_anchor.merge(other.matches_in_anchor)
-        neighbour_matches = {key: val.merge(other.matches_in_neighbours[key]) for key, val in self.matches_in_neighbours.items()}
+        neighbour_matches = {key: val.merge(other.matches_in_neighbours[key]) for key, val in self.matches_in_neighbours.items() if key in other.matches_in_neighbours}
         neighbour_matches.update({key: val.copy() for key, val in other.matches_in_neighbours.items() if key not in neighbour_matches})
 
-        return type(self)(
-            self.satisfied and other.satisfied, self.anchor,
-                matches_in_anchor=anchor_matches,
-                matches_in_neighbours=neighbour_matches,
-                negated=self.negated,
-            )
+        print("MERGING: ", self, other)
+
+        res = type(self)(
+            self.anchor,
+            matches_in_anchor=anchor_matches,
+            matches_in_neighbours=neighbour_matches,
+            negated=self.negated,
+        )
+        print("MERGED INTO")
+        print(res)
+        return res
 
     def copy(self, negate: bool = False) -> Self:
         return type(self)(
-            xor(self.satisfied, negate),
             anchor=self.anchor,
+            satisfied=xor(self.satisfied, negate),
             matches_in_anchor=self.matches_in_anchor.copy(negate=negate),
             matches_in_neighbours={key: val.copy(negate=negate) for key, val in self.matches_in_neighbours.items()},
             negated=xor(self.negated, negate),
@@ -153,7 +203,7 @@ class ConditionSatisfaction:
 
     @property
     def matches(self) -> set[str]:
-        return set(name for name, val in self.matches_in_anchor.items() if val)
+        return self.matches_in_anchor.get_positives()
 
     @property
     def ancillary_hits(self) -> dict[str, set[str]]:
@@ -171,7 +221,7 @@ class ConditionSatisfaction:
         return bool(self)
 
     def __bool__(self) -> bool:
-        return self.satisfied and bool(self.positive_matches_in_anchor)
+        return self.satisfied
 
     def __repr__(self) -> str:
         return str(self)

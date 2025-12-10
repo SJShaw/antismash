@@ -505,7 +505,6 @@ class Conditions:
         final_result = sub_results[0].copy(negate=self.negated)
         for operand, sub_result in zip(self.operands[1:], sub_results[1:]):
             final_result = final_result.merge(sub_result)
-        final_result.satisfied = xor(any(sub_results), self.negated)
         return final_result
 
     def get_satisfied(self, details: Details, local_only: bool = False) -> ConditionSatisfaction:
@@ -527,7 +526,6 @@ class Conditions:
             print("NEGATING")
             subs = subs.copy(negate=True)
             print(f" {self}: states after negation {subs}")
-#        assert subs.matches or not subs.met, f"{self} -> {subs=}"
         return subs
 
     def get_hit_string(self) -> str:
@@ -578,6 +576,7 @@ class AndCondition(Conditions):
         ("\nstart of AND:", details.cds)
         final_result = results[0].copy(negate=self.negated)
         print("AND RESULTS:")
+        print(" SUB SATS: ", [r.satisfied for r in results])
         for res in results:
             print("  ", res)
         for op, result in zip(self.operands, results):
@@ -586,6 +585,13 @@ class AndCondition(Conditions):
             sub_satisfaction = [sub.satisfied for sub in results]
             print("BEEP BOOP: ", sub_satisfaction)
         print(f"'{self}'", self.get_hit_string(), "final result", final_result)
+        if all(sub.matches or sub.ancillary_hits or sub.negated for sub in results):
+            final_result = ConditionSatisfaction(
+                final_result.anchor,
+                matches_in_anchor=final_result.matches_in_anchor,
+                matches_in_neighbours=final_result.matches_in_neighbours,
+                negated=final_result.negated,
+            )
         return final_result
 
     def get_hit_string(self) -> str:
@@ -646,7 +652,7 @@ class _OptionCollectionCondition(Conditions):
         elif hit_count >= self.count:
             good = not self.negated
 
-        return ConditionSatisfaction(good, anchor=details.cds, matches_in_anchor=hits, matches_in_neighbours=other_cds_hits)
+        return ConditionSatisfaction(anchor=details.cds, matches_in_anchor=hits, matches_in_neighbours=other_cds_hits)
 
     def get_hit_string(self) -> str:
         return f"{self.hits}*{self}"
@@ -697,11 +703,8 @@ class CDSCondition(Conditions):
                                                                    local_only=True)
         print("  CDS CONDITION:", details.cds, self)
         # start with the current cds (and end if local_only or satisifed)
-        if local_only or satisfied_internally:
-            print("this one here?", self, satisfied_internally, details.cds, "res", xor(self.negated, satisfied_internally.met))
-            res = satisfied_internally.copy(negate=self.negated)
-            print("this one conversion:", res)
-            return res
+        satisfied_internally = satisfied_internally.copy(negate=self.negated)
+        print("\n CDS RESULT:\n", satisfied_internally)
         return satisfied_internally
 
     def get_hit_string(self) -> str:
@@ -731,16 +734,15 @@ class SingleCondition(Conditions):
             present = any(res.query_id == self.name for res in value)
             print(f"   checking single: {self.name} found in neighbour {other}: {present}")
             if present:
-                print(f"      found in: {value}")
                 found_in_neighbours = True
             neighbours[other] = PresenceAbsence({self.name: Presence(present=present, negated=self.negated)})
         res = ConditionSatisfaction(
-            satisfied=xor(self.negated, found_in_cds or found_in_neighbours), anchor=details.cds,
+            anchor=details.cds,
             matches_in_anchor=PresenceAbsence({self.name: Presence(present=found_in_cds, negated=self.negated)}),
             matches_in_neighbours=neighbours,
             negated=self.negated,
         )
-        print(f"   done single, final satisfaction: {res.satisfied}\n")
+        print(f"   done single {self.negated=}, final satisfaction: {res.satisfied}\n")
         return res
 
 #        # do we only care about this CDS? then use the smaller set
@@ -806,7 +808,7 @@ class ScoreCondition(Conditions):
                     break
 
         return ConditionSatisfaction(
-            xor(self.negated, found_in_cds), anchor=details.cds,
+            anchor=details.cds,
             matches_in_anchor=PresenceAbsence({self.name: Presence(present=found_in_cds, negated=self.negated)}),
         )
 

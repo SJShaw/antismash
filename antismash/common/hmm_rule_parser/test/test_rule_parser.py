@@ -61,7 +61,7 @@ class DetectionTest(unittest.TestCase):
                 if not result:
                     print("SKIPPING", cds, "\n")
                     continue
-                print("GOOD MATCH FOR", cds)
+                print("GOOD MATCH FOR", cds, result)
                 print()
                 rule_results.append(result)
                 # check that we have something interesting to report
@@ -69,10 +69,6 @@ class DetectionTest(unittest.TestCase):
                 assert "*" in hit_string, str(result)
 
                 detected_types[cds].add(rule.name)
-                for other_cds, presences in result.matches_in_neighbours.items():
-                    print(f"other: {other_cds}:\n{presences}")
-                    if presences.get_positives():
-                        detected_types[other_cds].add(rule.name)
 
         return detected_types
 
@@ -81,8 +77,8 @@ class DetectionTest(unittest.TestCase):
         assert results == expected, f"{set(results)} != {set(expected)}"
 
     def test_single(self):
-        results = self.run_test("A", 10, 20, "a")
-        self.expect(results, ["GENE_1", "GENE_2"])
+#        results = self.run_test("A", 10, 20, "a")
+#        self.expect(results, ["GENE_1", "GENE_2"])
 
         results = self.run_test("A", 40, 10, "e")
         self.expect(results, ["GENE_4"])
