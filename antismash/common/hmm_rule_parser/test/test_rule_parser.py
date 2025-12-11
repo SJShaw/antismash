@@ -52,6 +52,7 @@ class DetectionTest(unittest.TestCase):
             assert rule.contains_positive_condition()
 
         detected_types = defaultdict(set)
+#        for cds in ["GENE_2"]:
         for cds in sorted(self.results_by_id, key=lambda gene_id: self.feature_by_id[gene_id]):
             rule_results = []
             for rule in rules:
@@ -288,6 +289,16 @@ class DetectionTest(unittest.TestCase):
         # below the cutoff
         results = self.run_test("A", 1, 1, "f and not minscore(e, 49)")
         self.expect(results, ["GENE_5"])
+
+    def test_multistate_presence(self):
+        # the same profile is present as both present and absent, but in different conditions
+        results = self.run_test("A", 25, 20, "a and cds(c and not a)")
+        # gene 1 is unsatisfied, despite satisfying the first, as it isn't close enough to a C
+        # gene 2 satisfies both conditions by itself
+        # gene 3 satisfies the first, with the second satisfied by 2
+        # genes 4 and 5 can't satisfy either by themselves
+        # explicit cores would be 2 and 3, with 1 coming in as an ancillary hit
+        self.expect(results, ["GENE_2", "GENE_3"])
 
 
 class RuleParserTest(unittest.TestCase):

@@ -188,7 +188,13 @@ from antismash.common.secmet import CDSFeature, FeatureLocation
 from antismash.common.secmet.locations import get_distance_between_locations
 
 from .structures import Multipliers, ProfileHit
-from .helpers import ConditionSatisfaction, Presence, PresenceAbsence
+from .helpers import (
+    AndConditionSatisfied,
+    ConditionSatisfaction,
+    OrConditionSatisfied,
+    Presence,
+    PresenceAbsence,
+)
 
 
 class RuleSyntaxError(SyntaxError):
@@ -500,11 +506,8 @@ class Conditions:
 
         # since ANDs are bound together, all subconditions we have here are ORs
         assert all(operator == TokenTypes.OR for operator in self.operators)
-        # which means a simple any() will cover us
         sub_results = [sub.get_satisfied(details, local_only) for sub in self.operands]
-        final_result = sub_results[0].copy(negate=self.negated)
-        for operand, sub_result in zip(self.operands[1:], sub_results[1:]):
-            final_result = final_result.merge(sub_result)
+        final_result = OrConditionSatisfied(details.cds, child_states=sub_results, negated=self.negated)
         return final_result
 
     def get_satisfied(self, details: Details, local_only: bool = False) -> ConditionSatisfaction:
@@ -579,19 +582,8 @@ class AndCondition(Conditions):
         print(" SUB SATS: ", [r.satisfied for r in results])
         for res in results:
             print("  ", res)
-        for op, result in zip(self.operands, results):
-            final_result = final_result.merge(result.copy(negate=self.negated))
-        if local_only:
-            sub_satisfaction = [sub.satisfied for sub in results]
-            print("BEEP BOOP: ", sub_satisfaction)
-        print(f"'{self}'", self.get_hit_string(), "final result", final_result)
-        if all(sub.matches or sub.ancillary_hits or sub.negated for sub in results):
-            final_result = ConditionSatisfaction(
-                final_result.anchor,
-                matches_in_anchor=final_result.matches_in_anchor,
-                matches_in_neighbours=final_result.matches_in_neighbours,
-                negated=final_result.negated,
-            )
+        final_result = AndConditionSatisfied(details.cds, child_states=results)
+        print(f" final and con sat'{self}'", self.get_hit_string(), "final result", final_result)
         return final_result
 
     def get_hit_string(self) -> str:
@@ -703,8 +695,8 @@ class CDSCondition(Conditions):
                                                                    local_only=True)
         print("  CDS CONDITION:", details.cds, self)
         # start with the current cds (and end if local_only or satisifed)
-        satisfied_internally = satisfied_internally.copy(negate=self.negated)
-        print("\n CDS RESULT:\n", satisfied_internally)
+        satisfied_internally = ConditionSatisfaction(anchor=details.cds, child_states=[satisfied_internally], negated=self.negated)
+        print("\n CDS RESULT:\n", type(satisfied_internally), satisfied_internally)
         return satisfied_internally
 
     def get_hit_string(self) -> str:
@@ -724,7 +716,6 @@ class SingleCondition(Conditions):
 
     def is_satisfied(self, details: Details, local_only: bool = False) -> ConditionSatisfaction:
         found_in_cds = self.name in details.possibilities
-        found_in_neighbours = False
         neighbours = {}
         print(f"   checking single: {self.name} in anchor {details.cds}? {found_in_cds}")
         items = [] if local_only else details.get_results_in_range().items()
@@ -733,43 +724,16 @@ class SingleCondition(Conditions):
                 continue
             present = any(res.query_id == self.name for res in value)
             print(f"   checking single: {self.name} found in neighbour {other}: {present}")
-            if present:
-                found_in_neighbours = True
             neighbours[other] = PresenceAbsence({self.name: Presence(present=present, negated=self.negated)})
+
         res = ConditionSatisfaction(
             anchor=details.cds,
             matches_in_anchor=PresenceAbsence({self.name: Presence(present=found_in_cds, negated=self.negated)}),
             matches_in_neighbours=neighbours,
             negated=self.negated,
         )
-        print(f"   done single {self.negated=}, final satisfaction: {res.satisfied}\n")
+        print(f"   done single {self.negated=}, final satisfaction: {res.satisfied}, {res}\n")
         return res
-
-#        # do we only care about this CDS? then use the smaller set
-#        if local_only or found_in_cds:
-#            print(f"SingleCondition good={xor(self.negated, found_in_cds)}, {negation=}, {self.negated=}, {found_in_cds=}")
-#            return ConditionMet(xor(self.negated, found_in_cds), negated=self.negated, presence_and_negation=negation)
-
-#        cds_feature = details.features_by_id[details.cds]
-#        # look at neighbours in range
-#        ancillary = {}
-#        for other, other_hits in details.results_by_id.items():
-#            if other == details.cds:
-#                continue
-#            other_location = details.features_by_id[other].location
-#            if not details.in_range(cds_feature.location, other_location):
-#                continue
-#            other_possibilities = [res.query_id for res in other_hits]
-#            if self.name in other_possibilities:
-#                if not self.negated:
-#                    ancillary[other] = {self.name}
-#                else:
-#                    negation[self.name] = negation.get(self.name, NegationState(present=True))
-#        if ancillary:
-#            return ConditionMet(not self.negated, ancillary_hits=ancillary, presence_and_negation=negation, negated=self.negated)
-
-#        # if negated and we failed to find anything, that's a good thing
-#        return ConditionMet(self.negated, negated=self.negated, presence_and_negation=negation)
 
     @property
     def profiles(self) -> Set[str]:
