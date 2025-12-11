@@ -167,19 +167,23 @@ class ConditionSatisfaction:
 
     @property
     def satisfied(self) -> bool:
-        return bool(self.positive_matches)
+        print(self.negated, self.positive_matches_in_anchor, self.blocks())
+        if self.negated:
+            print("neg")
+            return self.blocks() or not self.positive_matches_in_anchor
+        print("here", self.child_states, self._matches_in_anchor, self.positive_matches_in_anchor)
+        return bool(self.positive_matches_in_anchor)
 
     def blocks(self) -> bool:
         if any(presence.blocks() for presence in self.matches_in_anchor.values()):
-            return True
+            return self.negated
         for neighbour in self.matches_in_neighbours.values():
             if any(presence.blocks() for presence in neighbour.values()):
-                return True
-        return False
+                return self.negated
+        return self.negated
 
     @property
     def positive_matches_in_anchor(self) -> set[str]:
-        print("pos in anc", [(n, bool(m)) for n, m in self.matches_in_anchor.items()])
         return self.matches_in_anchor.get_positives()
 
     @property
@@ -191,8 +195,6 @@ class ConditionSatisfaction:
 
     @property
     def positive_matches(self) -> set[str]:
-        print("pos matches input", self.positive_matches_in_anchor, self.positive_matches_in_neighbours)
-        print("pos matches output", self.positive_matches_in_anchor.union(self.positive_matches_in_neighbours))
         return self.positive_matches_in_anchor.union(self.positive_matches_in_neighbours)
 
     def has_any_negative_matches(self) -> bool:
