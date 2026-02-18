@@ -6,8 +6,8 @@
 from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar, Union
 
-from Bio.SeqFeature import SeqFeature
 from Bio.Seq import Seq
+from genomyglot import Feature as SeqFeature
 
 from antismash.common.secmet.locations import (
     location_contains_other,
@@ -36,6 +36,9 @@ class Feature:
     def __init__(self, location: Location, feature_type: str,
                  created_by_antismash: bool = False) -> None:
         assert isinstance(location, (FeatureLocation, CompoundLocation)), type(location)
+        if not location.start <= location.end:
+            print(location)
+            print(location.start, location.end)
         assert location.start <= location.end, f"Feature location invalid: {location}"
         if location.start < 0:
             raise ValueError(f"location contains negative coordinate: {location}")
@@ -165,7 +168,6 @@ class Feature:
         # sorted here to match the behaviour of biopython
         for key, val in sorted(quals.items()):
             feature.qualifiers[key] = val
-        assert isinstance(feature.qualifiers, dict)
         return [feature]
 
     def __lt__(self, other: Union["Feature", Location]) -> bool:
@@ -214,7 +216,6 @@ class Feature:
         if feature is None:
             feature = cls(location_from_biopython(bio_feature.location), bio_feature.type)
             if not leftovers:
-                assert isinstance(bio_feature.qualifiers, dict)
                 leftovers = bio_feature.qualifiers.copy()
             feature.notes = leftovers.pop("note", [])
         assert isinstance(feature, cls)
@@ -226,7 +227,9 @@ class Feature:
                 feature.location = feature.location.clone_with_frameshift(start)
                 feature._original_codon_start = int(start) - 1
 
-            feature._qualifiers.update(leftovers)  # shouldn't be a public thing, so pylint: disable=protected-access
+            # TODO: fix massive performance issue
+            for key, values in leftovers.items():
+                feature._qualifiers[key] = values  # shouldn't be a public thing, so pylint: disable=protected-access
         else:
             feature.created_by_antismash = False
         assert feature

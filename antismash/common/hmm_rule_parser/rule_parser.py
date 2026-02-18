@@ -732,7 +732,11 @@ class SingleCondition(Conditions):
             cond = ConditionMet(xor(self.negated, found_in_cds), set([self.name]))
             return cond
 
-        cds_feature = details.features_by_id[details.cds]
+        try:
+            cds_feature = details.features_by_id[details.cds]
+        except:
+            print(details.features_by_id)
+            raise
         # look at neighbours in range
         ancillary = {}
         for other, other_hits in details.results_by_id.items():

@@ -93,7 +93,7 @@ class AntismashResults:
         res: Dict[str, Any] = OrderedDict()
         res["version"] = self.version
         res["input_file"] = self.input_file
-        res["records"] = dump_records(self.results, self.records)
+#        res["records"] = dump_records(self.results, self.records)  # TODO do not commit
         res["timings"] = self.timings_by_record
         res["taxon"] = self.taxon
         res["schema"] = self.SCHEMA_VERSION

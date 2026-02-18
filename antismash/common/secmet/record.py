@@ -30,10 +30,15 @@ from typing import (
 )
 from zlib import crc32
 
-from Bio import SeqIO
 from Bio.Seq import Seq
-from Bio.SeqFeature import SeqFeature
-from Bio.SeqRecord import SeqRecord, UndefinedSequenceError
+from Bio.SeqRecord import SeqRecord as _BioSeqRecord
+from genomyglot import (
+    Feature as SeqFeature,
+    Locus,
+    Record as SeqRecord,
+    genbank,
+)
+from Bio.SeqRecord import UndefinedSequenceError
 
 from .errors import SecmetInvalidInputError
 from .features import (
@@ -84,6 +89,8 @@ class Record:
     """A record containing secondary metabolite clusters"""
     # slots not for space, but to stop use as a horrible global
     __slots__ = ["_record", "_seq", "skip", "_cds_features", "_cds_by_name",
+                 "_base_record",
+                 "id",
                  "_cds_by_location",
                  "_protoclusters", "original_id", "_cds_motifs", "_pfam_domains",
                  "_antismash_domains", "_protocluster_numbering", "_nonspecific_features",
@@ -98,6 +105,7 @@ class Record:
 
     def __init__(self, seq: Union[Seq, str] = "", *,
                  transl_table: int = 1, gc_content: float = -1.,
+                 base_record: SeqRecord = None,
                  **kwargs: Any,
                  ) -> None:
         # prevent paths from being used as a sequence
@@ -105,7 +113,9 @@ class Record:
         if isinstance(seq, str):
             seq = Seq(seq)
         assert isinstance(seq, Seq)
-        self._record = SeqRecord(seq, **kwargs)
+        self._record = _BioSeqRecord(seq, **kwargs)
+        self._base_record = base_record or SeqRecord("", str(seq))
+        self.id = self._base_record.identifier or kwargs.get("id", "")
         self.record_index: Optional[int] = None
         self.original_id = None
         self.skip: Optional[str] = None  # TODO: move to yet another abstraction layer?
@@ -152,17 +162,36 @@ class Record:
 
         self._sources: List[Source] = []
 
+    @property
+    def seq(self) -> Seq:
+        return self._record.seq
+
+    @seq.setter
+    def seq(self, seq: Seq) -> None:
+        self._record.seq = seq
+
+    @property
+    def description(self) -> str:
+        return self._base_record.core_info.description
+
+    @property
+    def name(self) -> str:
+        return self._base_record.core_info.locus.identifier
+
+
     def __getattr__(self, attr: str) -> Any:
-        # passthroughs to the original SeqRecord
-        if attr in ["id", "seq", "description", "name", "annotations", "dbxrefs"]:
-            return getattr(self._record, attr)
+#        # passthroughs to the original SeqRecord
+#        if attr in ["seq", "description", "name", "annotations", "dbxrefs"]:
+#            return getattr(self._record, attr)
         if attr in Record.__slots__:
             return self.__getattribute__(attr)
+        else:
+            return getattr(self._base_record, attr)
         raise AttributeError(f"Record has no attribute {attr!r}")
 
     def __setattr__(self, attr: str, value: Any) -> None:
         # passthroughs to the original SeqRecord
-        if attr in ["id", "seq", "description", "name"]:
+        if attr in ["description", "name"]:
             setattr(self._record, attr, value)
             return
         if attr in ["annotations"]:
@@ -183,7 +212,7 @@ class Record:
 
     def is_circular(self) -> bool:
         """ Returns True if the genome is circular """
-        return self._record.annotations.get("topology", "").lower() == "circular"
+        return self._base_record.core_info.locus.structure.lower() == "circular"
 
     def add_annotation(self, key: str, value: List) -> None:
         """Adding annotations in Record"""
@@ -819,8 +848,7 @@ class Record:
         for kind in [CandidateCluster, Region, Module]:  # type: Type[Feature]
             postponed_features[kind.FEATURE_TYPE] = (kind, [])
 
-        assert isinstance(seq_record, SeqRecord), type(seq_record)
-        molecule_type = seq_record.annotations.get("molecule_type", "DNA")
+        molecule_type = seq_record.core_info.locus.alphabet or "DNA"
         if not molecule_type.upper().endswith("DNA"):
             raise SecmetInvalidInputError(f"{molecule_type} records are not supported")
         if seq_record.seq and not Record.is_nucleotide_sequence(seq_record.seq):
@@ -828,8 +856,7 @@ class Record:
         transl_table = 1  # standard
         if str(taxon) == "bacteria":
             transl_table = 11  # bacterial, archea, plant plastid code
-        record = cls(seq=seq_record.seq, transl_table=transl_table, **kwargs)
-        record._record = seq_record
+        record = cls(seq=seq_record.seq, transl_table=transl_table, base_record=seq_record, **kwargs)
         # because is_circular() can't be used reliably at this stage due to fasta files
         # unfortunately, circular records can also exist in fungal inputs, i.e. NC_027416, a mitochondrion
         can_be_circular = True
@@ -867,6 +894,7 @@ class Record:
                 try:
                     record.add_biopython_feature(feature)
                 except ValueError as err:
+                    raise
                     if feature.type not in ANTISMASH_SPECIFIC_TYPES or not discard_antismash_features:
                         raise SecmetInvalidInputError(str(err)) from err
 
@@ -887,7 +915,17 @@ class Record:
             contained in the file.
         """
         records = []
-        for bio in SeqIO.parse(filepath, "genbank"):
+        for record in genbank.read_file(filepath):
+            records.append(Record.from_biopython(record, taxon))
+        return records
+
+    @staticmethod
+    def from_genbank_genomyglot(filepath: str, taxon: str = "bacteria") -> List["Record"]:
+        """ Reads a genbank file and creates a Record instance for each record
+            contained in the file.
+        """
+        records = []
+        for bio in genbank.read_file(filepath):
             records.append(Record.from_biopython(bio, taxon))
         return records
 

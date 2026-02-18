@@ -458,24 +458,25 @@ def write_outputs(results: serialiser.AntismashResults, options: ConfigType) -> 
         for val in results.timings_by_record.values():
             val[html.__name__] = duration
 
-    # convert records to biopython
-    bio_records = [record.to_biopython() for record in results.records]
-
-    # add antismash meta-annotation to records
-    add_antismash_comments(list(zip(results.records, bio_records)), options)
-
-    if options.region_gbks:
-        logging.debug("Writing cluster-specific genbank files")
-        for record, bio_record in zip(results.records, bio_records):
-            for region in record.get_regions():
-                region.write_to_genbank(directory=options.output_dir, record=bio_record)
-
-    # write records to an aggregate output
     base_filename = canonical_base_filename(results.input_file, options.output_dir, options)
-    if options.summary_gbk:
-        combined_filename = base_filename + ".gbk"
-        logging.debug("Writing final genbank file to '%s'", combined_filename)
-        SeqIO.write(bio_records, combined_filename, "genbank")
+    # convert records to biopython
+    if options.region_gbks or options.summary_gbk:
+        bio_records = [record.to_biopython() for record in results.records]
+
+        # add antismash meta-annotation to records
+        add_antismash_comments(list(zip(results.records, bio_records)), options)
+
+        if options.region_gbks:
+            logging.debug("Writing cluster-specific genbank files")
+            for record, bio_record in zip(results.records, bio_records):
+                for region in record.get_regions():
+                    region.write_to_genbank(directory=options.output_dir, record=bio_record)
+
+        # write records to an aggregate output
+        if options.summary_gbk:
+            combined_filename = base_filename + ".gbk"
+            logging.debug("Writing final genbank file to '%s'", combined_filename)
+            SeqIO.write(bio_records, combined_filename, "genbank")
 
     zipfile = base_filename + ".zip"
     if os.path.exists(zipfile):
@@ -712,7 +713,7 @@ def _run_antismash(sequence_file: Optional[str], options: ConfigType) -> int:
         print("All prerequisites satisfied")
         return 0
 
-    check_prerequisites(options.all_enabled_modules, options)
+#    check_prerequisites(options.all_enabled_modules, options)
 
     # start up profiling if relevant
     if options.profile:

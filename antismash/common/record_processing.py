@@ -14,6 +14,7 @@ import warnings
 from Bio.Seq import Seq, UndefinedSequenceError
 from Bio.SeqRecord import SeqRecord
 from helperlibs.bio import seqio
+from genomyglot import genbank as _genbank
 
 from antismash.common import gff_parser
 from antismash.common.errors import AntismashInputError
@@ -39,6 +40,7 @@ def _strict_parse(filename: str) -> List[SeqRecord]:
         Returns:
             a list of SeqRecords parsed
     """
+    return _genbank.read_file(filename)
     filter_messages = [
         r".*invalid location.*",
         r".*Expected sequence length.*",
@@ -73,12 +75,12 @@ def _strip_invalid_chars_from_ids(records: Iterable[Record]) -> None:
         return "".join(v for v in value if v not in _INVALID_ID_CHARS)
 
     for record in records:
-        stripped_id = strip(record.id)
+        stripped_id = strip(record.identifier)
         # store the original name, if it hasn't already been modified
-        if stripped_id != record.id and not record.original_id:
-            record.original_id = record.id
+        if stripped_id != record.identifier and not record.original_id:
+            record.original_id = record.identifier
         record.id = stripped_id
-        record.name = strip(record.name)
+        record.core_info.locus.identifier = strip(record.core_info.locus.identifier)
 
 
 def parse_input_sequence(filename: str, taxon: str = "bacteria", minimum_length: int = -1,
@@ -108,8 +110,9 @@ def parse_input_sequence(filename: str, taxon: str = "bacteria", minimum_length:
     for record in _strict_parse(filename):
         # in no case allow record identifiers to be longer than the filesystem's
         # maximum file length, allowing for region numbers and extension
-        if len(record.id) > os.pathconf("/", "PC_NAME_MAX") - len(".region000.gbk"):
-            raise AntismashInputError(f"record identifier too long for file system: {record.id}")
+        identifier = record.identifier
+        if len(identifier) > os.pathconf("/", "PC_NAME_MAX") - len(".region000.gbk"):
+            raise AntismashInputError(f"record identifier too long for file system: {identifier}")
 
         if records_contain_shotgun_scaffolds([record]):
             raise AntismashInputError("incomplete whole genome shotgun records are not supported")
@@ -117,7 +120,7 @@ def parse_input_sequence(filename: str, taxon: str = "bacteria", minimum_length:
         try:
             record.seq[0]
         except (IndexError, UndefinedSequenceError):
-            raise AntismashInputError(f"record contains no sequence information: {record.id}")
+            raise AntismashInputError(f"record contains no sequence information: {identifier}")
 
         if minimum_length < 1 or len(record.seq) >= minimum_length:
             records.append(record)
@@ -133,13 +136,13 @@ def parse_input_sequence(filename: str, taxon: str = "bacteria", minimum_length:
 
     for record in records:
         if not Record.is_nucleotide_sequence(record.seq):
-            raise AntismashInputError(f"protein records are not supported: {record.id}")
+            raise AntismashInputError(f"protein records are not supported: {record.identifier}")
 
     # before conversion to secmet records, trim if required
     if start > -1 or end > -1:
         if len(records) > 1:
             raise AntismashInputError("--start and --end options cannot be used with multiple records")
-        if start != -1 and end != -1 and start > end and records[0].annotations.get("topology") == "circular":
+        if start != -1 and end != -1 and start > end and records[0].core_info.locus.structure.lower() == "circular":
             raise AntismashInputError(
                 "--start and --end cannot be used for "
                 "a cross-origin section of a circular record"
@@ -170,9 +173,10 @@ def parse_input_sequence(filename: str, taxon: str = "bacteria", minimum_length:
     for record in records:
         try:
             converted_records.append(Record.from_biopython(record, taxon, discard_antismash_features=True))
-        except SecmetInvalidInputError as err:
+        except RuntimeError as err:
+            raise
             if ignore_invalid_records:
-                logging.warning("Ignoring invalid record %r %s", record.id, err)
+                logging.warning("Ignoring invalid record %r %s", record.identifier, err)
             else:
                 raise AntismashInputError(str(err)) from err
     if not converted_records:
@@ -195,7 +199,7 @@ def strip_record(record: SeqRecord) -> SeqRecord:
         Returns
             the same SeqRecord instance that was given
     """
-    logging.debug("Stripping antiSMASH features and annotations from record: %s", record.id)
+    logging.debug("Stripping antiSMASH features and annotations from record: %s", record.identifier)
     old_as_types = {"cluster", "cluster_border", "cluster_core"}
     current_as_types = {"protocluster", "proto_core", "cand_cluster", "subregion",
                         "region", "PFAM_domain", "aSDomain", "promoter"}
@@ -210,11 +214,8 @@ def strip_record(record: SeqRecord) -> SeqRecord:
     }
 
     # remove any record-level comment
-    if "structured_comment" in record.annotations:
-        record.annotations["structured_comment"].pop("antiSMASH-Data", None)
-        if not record.annotations["structured_comment"]:
-            record.annotations.pop("structured_comment")
-
+    logging.critical("structured comments not being removed")
+    record.core_info.structured_comments#.remove("antiSMASH-Data")
     # remove relevant features and qualifiers
     kept_features = []
     for feature in record.features:
@@ -400,11 +401,11 @@ def pre_process_sequences(sequences: List[Record], options: ConfigType, genefind
         if len(all_record_ids) < len(sequences):
             all_record_ids = set()
             for record in sequences:
-                if record.id in all_record_ids:
+                if record.identifier in all_record_ids:
                     if not record.original_id:
                         record.original_id = record.id
-                    record.id = generate_unique_id(record.id, all_record_ids)[0]
-                all_record_ids.add(record.id)
+                    record.identifier = generate_unique_id(record.identifier, all_record_ids)[0]
+                all_record_ids.add(record.identifier)
             assert len(all_record_ids) == len(sequences), f"{len(all_record_ids)} != {len(sequences)}"
         # Ensure all records have valid names
         for record in sequences:
@@ -416,8 +417,8 @@ def pre_process_sequences(sequences: List[Record], options: ConfigType, genefind
 
     for record in sequences:
         if record.skip or not record.seq:
-            logging.warning("Record %s has no sequence, skipping.", record.id)
-        if not record.id:
+            logging.warning("Record %s has no sequence, skipping.", record.identifier)
+        if not record.identifier:
             raise AntismashInputError("record has no name")
 
     # skip anything not matching the filter
@@ -522,7 +523,7 @@ def records_contain_shotgun_scaffolds(records: List[Record]) -> bool:
         except UndefinedSequenceError:
             defined = False
         except IndexError:
-            raise AntismashInputError(f"record contains no sequence information: {record.id}")
+            raise AntismashInputError(f"record contains no sequence information: {record.identifier}")
         if not defined and any(key in record.annotations for key in [
             "wgs_scafld",
             "wgs",
@@ -565,37 +566,35 @@ def fix_record_name_id(record: Record, all_record_ids: Set[str],
 
         return f"c{contig_no:05d}_{idstring[:7]}.."
 
-    old_id = record.id
+    old_id = record.identifier
 
-    if len(record.id) > 16 and not allow_long_names:
+    if len(record.identifier) > 16 and not allow_long_names:
         # Check if it is a RefSeq accession number like NZ_AMZN01000079.1 that
         # is too long just because of the version number behind the dot
-        if (record.id[-2] == "." and
-                record.id.count(".") == 1 and
-                len(record.id.partition(".")[0]) <= 16 and
-                record.id.partition(".")[0] not in all_record_ids):
-            record.id = record.id.partition(".")[0]
-            all_record_ids.add(record.id)
+        if (record.identifier[-2] == "." and
+                record.identifier.count(".") == 1 and
+                len(record.identifier.partition(".")[0]) <= 16 and
+                record.identifier.partition(".")[0] not in all_record_ids):
+            record.identifier = record.identifier.partition(".")[0]
+            all_record_ids.add(record.identifier)
         else:  # Check if the ID suggested by _shorten_ids is unique
             if _shorten_ids(old_id) not in all_record_ids:
                 name = _shorten_ids(old_id)
             else:
-                name, _ = generate_unique_id(record.id[:12], all_record_ids, max_length=16)
-            record.id = name
+                name, _ = generate_unique_id(record.identifier[:12], all_record_ids, max_length=16)
+            record.identifier = name
             all_record_ids.add(name)
 
-        logging.warning('Fasta header too long: renamed "%s" to "%s"', old_id, record.id)
+        logging.warning('Fasta header too long: renamed "%s" to "%s"', old_id, record.identifier)
 
     if len(record.name) > 16 and not allow_long_names:
         record.name = _shorten_ids(record.name)
 
-    if 'accession' in record.annotations and \
-       len(record.annotations['accession']) > 16:
-        acc = record.annotations['accession']
+    acc = record.core_info.accession
+    if len(acc) > 16:
+        record.core_info.accession = _shorten_ids(acc)
 
-        record.annotations['accession'] = _shorten_ids(acc)
-
-    if not record.original_id and old_id != record.id:
+    if not record.original_id and old_id != record.identifier:
         record.original_id = old_id
 
 

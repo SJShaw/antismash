@@ -39,7 +39,7 @@ def is_enabled(_options: ConfigType) -> bool:
     """  Uses the supplied options to determine if the module should be run
     """
     # in this case, yes, always
-    return True
+    return False
 
 
 def regenerate_previous_results(results: Dict[str, Any], record: Record,

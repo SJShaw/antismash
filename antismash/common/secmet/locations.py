@@ -7,36 +7,95 @@ import logging
 from typing import (
     Any,
     Iterable,
+    Iterator,
     List,
     Optional,
+    Self,
     Type,
     TypeVar,
     Union,
+    overload,
 )
 
-from Bio.SeqFeature import (
-    Position,
+from Bio.Seq import Seq, reverse_complement
+#from Bio.SeqFeature import (
+#    Position,
+#    AfterPosition,
+#    BeforePosition,
+#    CompoundLocation as _CompoundLocation,
+#    ExactPosition,
+#    Location as _Location,
+#    SimpleLocation as _SimpleLocation,
+#    SeqFeature,
+#    UnknownPosition,
+#)
+
+from genomyglot import (
+    Ambiguity,
     AfterPosition,
     BeforePosition,
-    CompoundLocation as _CompoundLocation,
-    ExactPosition,
-    Location as _Location,
-    SimpleLocation as _SimpleLocation,
-    SeqFeature,
-    UnknownPosition,
+    Exon as _Exon,
+    Feature as SeqFeature,
+    Location as __Location,
+    Operator,
+    Position,
+    Strand,
 )
 
 from .errors import SecmetInvalidInputError
 
+STRAND_MAP = {
+    -1: Strand.REVERSE,
+    0: Strand.UNSTRANDED,
+    1: Strand.FORWARD,
+}
 
-Location = Union["FeatureLocation", "CompoundLocation"]
+
+ExactPosition = Position
+Location = Union["CompoundLocation", "FeatureLocation"]
 # a generic for 'B'iopython types while they aren't sharing a common parent class
-B = TypeVar("B", _CompoundLocation, _SimpleLocation)
+#B = TypeVar("B", _CompoundLocation, _SimpleLocation)
 # a generic for the resulting type of the mixin and biopython classes
 T = TypeVar("T", bound=Location)
 
 
-class _LocationMixin(_Location):
+class Exon(_Exon):
+    def __iter__(self) -> Iterator:
+        for i in range(self.start, self.stop):
+            yield i
+
+    @classmethod
+    def from_external(cls, external: _Exon) -> Self:
+        return cls(external.start, external.stop, external.strand)
+
+    def __contains__(self, coordinate: Position | int) -> bool:
+        if isinstance(coordinate, Position):
+            coordinate = coordinate.value
+        return self.start <= coordinate < self.stop
+
+    def __repr__(self) -> str:
+        return f"Exon({self.start}, {self.stop}, {self.strand})"
+
+
+class _Location(__Location):
+    def __init__(self, exons: list[Exon], *, op: Operator = Operator.NONE, strand: Strand | None = None):
+        if isinstance(strand, int):
+            strand = STRAND_MAP[strand]
+        if len(exons) == 1:
+            strand = exons[0].strand
+        super().__init__(exons, op, strand)
+#        import logging; logging.critical("TODO: direct assignment (self.exons = []) should be working, but isn't")
+#        self.exons = [Exon.from_external(exon) for exon in self.exons]
+# vs
+#        new_exons = [Exon.from_external(exon) for exon in self.exons]
+#        self.exons = new_exons
+
+        assert all(isinstance(e, Exon) for e in self.exons), str([type(e) for e in self.exons])
+
+    @property
+    def end(self) -> int:
+        return max(exon.stop for exon in self.exons)
+
     def get_comparator(self: T) -> tuple[int, int]:
         """Get a comparison helper tuple consisting of start position and length."""
         start = self.start
@@ -183,9 +242,12 @@ class _LocationMixin(_Location):
             Returns:
                 whether the end is ambiguous
         """
-
         if self.strand == -1:
+            return self.parts[-1].start.ambiguity == Ambiguity.BEFORE
+            print("rev start", self.parts[-1].start, type(self.parts[-1].start))
             return isinstance(self.parts[-1].start, BeforePosition)
+        return self.parts[-1].stop.ambiguity == Ambiguity.AFTER
+        print("forw end", self.parts[-1].end, type(self.parts[-1].end))
         return isinstance(self.parts[-1].end, AfterPosition)
 
     def has_ambiguous_start(self) -> bool:
@@ -198,16 +260,51 @@ class _LocationMixin(_Location):
             return isinstance(self.parts[0].end, AfterPosition)
         return isinstance(self.parts[0].start, BeforePosition)
 
+    def extract(self, sequence: str) -> Seq:
+        chunks = []
+        if len(sequence) < max(e.stop for e in self.exons):
+            raise ValueError("sequence must contain the location")
+        for exon in self.exons:
+            chunks.append(str(sequence[exon.start.value:exon.stop.value]))
+        if self.strand == Strand.REVERSE:
+            return reverse_complement(Seq("".join(chunks)))
+        return Seq("".join(chunks))
 
-class FeatureLocation(_LocationMixin, _SimpleLocation):
+    def has_defined_strand(self) -> bool:
+        return self.strand in [Strand.FORWARD, Strand.REVERSE]
+
+    def __contains__(self, coordinate: Union[int, Position]) -> bool:
+        if isinstance(coordinate, Position):
+            coordinate = coordinate.value
+        for exon in self.exons:
+            if exon.start <= coordinate <= exon.stop:
+                return True
+        return False
+
+
+class FeatureLocation(_Location):
     """ A wrapper of biopython's SimpleLocation (previously FeatureLocation) to add extra
         functionality.
     """
+    def __init__(self, start: Union[int, Position], stop: Union[int, Position],
+                 strand: Union[int, Strand]) -> None:
+        if isinstance(start, int):
+            start = Position(start)
+        if isinstance(stop, int):
+            stop = Position(stop)
+        if isinstance(strand, int):
+            strand = STRAND_MAP[strand]
+        super().__init__([Exon(start, stop, strand)])
+
     def clone(self: T) -> T:
-        return FeatureLocation(self.start, self.end, self.strand)
+        return FeatureLocation(self.start, self.stop, self.strand)
+
+    def __iter__(self) -> Iterator:
+        for i in range(start, stop):
+            yield i
 
     @classmethod
-    def from_biopython(cls: Type["FeatureLocation"], bio: _SimpleLocation) -> "FeatureLocation":
+    def from_biopython(cls: Type["FeatureLocation"], bio: _Location) -> "FeatureLocation":
         """ Constructs an instance from the given biopython FeatureLocation.
 
             Arguments:
@@ -215,34 +312,48 @@ class FeatureLocation(_LocationMixin, _SimpleLocation):
         """
         return cls(bio.start, bio.end, bio.strand)
 
-    def __contains__(self, value: Union[int, T]) -> bool:
+    def __contains__(self, value: Union[int, T, Position]) -> bool:
         if isinstance(value, int):
             return super().__contains__(value)
+        if isinstance(value, Position):
+            return super().__contains__(value.value)
         return self.contains(value)
+
+    def __repr__(self) -> str:
+        return f"FeatureLocation({self.start}, {self.end}, {self.strand})"
 
 
 SimpleLocation = FeatureLocation  # for name mapping purposes between older and newer biopython styles
 
 
-class CompoundLocation(_LocationMixin, _CompoundLocation):
+class CompoundLocation(_Location):
     """ A wrapper of biopython's CompoundLocation to add extra functionality.
     """
+    def __init__(self, parts: list[FeatureLocation], operator: Operator = Operator.JOIN) -> None:
+        assert parts
+        exons = [Exon(part.start, part.stop, part.strand) for part in parts]
+        super().__init__(exons, op=operator, strand=exons[0].strand)
+
     def clone(self: T) -> T:
         return CompoundLocation(self.parts.copy(), operator=self.operator)
 
     @classmethod
-    def from_biopython(cls: Type["CompoundLocation"], bio: _CompoundLocation) -> "CompoundLocation":
+    def from_biopython(cls: Type["CompoundLocation"], bio: _Location) -> "CompoundLocation":
         """ Constructs an instance from the given biopython CompoundLocation.
 
             Arguments:
                 bio: the biopython location to convert
         """
-        return cls(bio.parts, operator=bio.operator)
+        parts = [Exon.from_external(part) for part in bio.exons]
+        return cls(parts, operator=bio.operator)
 
     def __contains__(self, value: Union[int, T]) -> bool:
         if isinstance(value, int):
             return super().__contains__(value)
         return self.contains(value)
+
+    def __repr__(self) -> str:
+        return f"CompoundLocation({', '.join(repr(p) for p in self.exons)}, {repr(self.op)})"
 
 
 def _reduce_parts_to_location(parts: list[FeatureLocation], wrap_point: Optional[int]) -> Location:
@@ -629,10 +740,10 @@ def get_distance_between_locations(first: Location, second: Location, wrap_point
     if wrap_point:
         offset = wrap_point
     variants = [
-        abs(first.start - second.end + offset),
-        abs(first.end - second.start + offset),
-        abs(second.start - first.end + offset),
-        abs(second.end - first.start + offset)
+        abs(int(first.start - second.end + offset)),
+        abs(int(first.end - second.start + offset)),
+        abs(int(second.start - first.end + offset)),
+        abs(int(second.end - first.start + offset))
     ]
     distance = min(variants)
     if wrap_point:
@@ -652,8 +763,6 @@ def location_bridges_origin(location: Location, allow_reversing: bool = False) -
             False if the location does not bridge the origin or if the location
             is of indeterminate strand, otherwise True
     """
-    assert isinstance(location, (FeatureLocation, CompoundLocation)), type(location)
-
     # if it's not compound, it can't bridge at all
     if not isinstance(location, CompoundLocation):
         return False
@@ -692,7 +801,10 @@ def location_bridges_origin(location: Location, allow_reversing: bool = False) -
     return False
 
 
-def location_from_biopython(bio: B) -> Location:
+def _location_from_exon(exon: _Exon) -> Location:
+    return FeatureLocation(exon.start, exon.stop, exon.strand)
+
+def location_from_biopython(bio: _Location | _Exon) -> Location:
     """ Converts the given biopython location instance into a wrapped version
         for more utility.
 
@@ -702,10 +814,16 @@ def location_from_biopython(bio: B) -> Location:
         Returns:
             an instance of Location, matching the type of the location provided
     """
-    if isinstance(bio, _CompoundLocation):
-        parts = [location_from_biopython(part) for part in bio.parts]
-        return CompoundLocation(parts, bio.operator)
-    return FeatureLocation(bio.start, bio.end, bio.strand)
+    if len(bio.exons) > 1:
+        parts = [_location_from_exon(part) for part in bio.parts]
+        loc = CompoundLocation(parts, bio.operator)
+        print("orig", bio.start, bio.stop)
+        print("new", loc.start, loc.end)
+    else:
+        loc = FeatureLocation(bio.start, bio.end, bio.strand)
+    assert isinstance(loc, (CompoundLocation, FeatureLocation)), type(loc)
+    assert hasattr(loc, "crosses_origin"), type(loc)
+    return loc
 
 
 def _is_valid_split(lower: list[FeatureLocation], upper: list[FeatureLocation], strand: int) -> bool:
@@ -803,6 +921,8 @@ def location_contains_other(outer: Location, inner: Location) -> bool:
         Returns:
             True if outer contains inner, otherwise False
     """
+    assert isinstance(outer, _Location), outer
+    assert isinstance(inner, (_Location, _Exon)), inner
     if isinstance(inner, CompoundLocation):
         return all(location_contains_other(outer, part) for part in inner.parts)
     if isinstance(outer, CompoundLocation):
@@ -814,13 +934,14 @@ def location_from_string(data: str) -> Location:
     """ Converts a string, e.g. [<1:6](-), to a FeatureLocation or CompoundLocation
     """
     def parse_position(string: str) -> Position:
-        """ Converts a positiong from a string into a Position subclass """
+        """ Converts a position from a string into a Position subclass """
         if string[0] == '<':
             return BeforePosition(int(string[1:]))
         if string[0] == '>':
             return AfterPosition(int(string[1:]))
         if string == "UnknownPosition()":
-            return UnknownPosition()
+            raise NotImplementedError()
+#            return UnknownPosition()
         return ExactPosition(int(string))
 
     def parse_single_location(string: str) -> FeatureLocation:
@@ -874,7 +995,7 @@ def make_forwards(location: Location) -> Location:
     return loc
 
 
-def location_contains_overlapping_exons(location: Union[Location, B]) -> bool:
+def location_contains_overlapping_exons(location: Location) -> bool:
     """ Checks for multiple exons with the same end location, meaning they use the
         same stop codon
 
@@ -884,7 +1005,7 @@ def location_contains_overlapping_exons(location: Union[Location, B]) -> bool:
         Returns:
             True if the location contains exons sharing a stop codon
     """
-    if not isinstance(location, (CompoundLocation, FeatureLocation, _CompoundLocation, _SimpleLocation)):
+    if not isinstance(location, (CompoundLocation, FeatureLocation, __Location)):
         raise TypeError(f"expected location type, received {type(location)}")
     if len(location.parts) == 1:
         return False
@@ -911,9 +1032,6 @@ def ensure_valid_locations(features: List[SeqFeature], can_be_circular: bool, se
             None
     """
     for feature in features:
-        # biopython drops invalid locations, so catch that first
-        if feature.location is None:
-            raise ValueError("one or more features with missing or invalid locations")
         # features outside the sequence cause problems with motifs and translations
         if feature.location.end > sequence_length:
             raise ValueError(f"feature outside record sequence: {feature.location}")
@@ -928,8 +1046,9 @@ def ensure_valid_locations(features: List[SeqFeature], can_be_circular: bool, se
     non_standard = 0
     for feature in features:
         # update from biopython to internal types
+        orig = feature.location
         feature.location = location_from_biopython(feature.location)
-
+        assert len(orig.exons) == len(feature.location.exons), (str(orig), str(feature.location))
         if not feature.location.strand or feature.type not in ["CDS", "gene"]:
             continue
 

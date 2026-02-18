@@ -20,7 +20,7 @@ from ..features import (
     CandidateCluster,
 )
 from ..features.candidate_cluster import CandidateClusterKind
-from ..locations import CompoundLocation, FeatureLocation, Location
+from ..locations import CompoundLocation, Exon, FeatureLocation, Location, Strand
 from ..record import Record, Seq
 
 
@@ -268,6 +268,7 @@ def rotate(record: Record, cut_point: int, padding: int = 0) -> None:
 def split_location_on_cut(location: Location, cut_point: int) -> CompoundLocation:
     new_parts = []
     for part in location.parts:
+        print(type(part))
         if cut_point not in part:
             new_parts.append(part)
             continue
@@ -277,11 +278,17 @@ def split_location_on_cut(location: Location, cut_point: int) -> CompoundLocatio
 
 
 def test_split():
-    assert split_location_on_cut(FeatureLocation(5, 12, -1), 7).parts == [
-        FeatureLocation(5, 7, -1), FeatureLocation(7, 12, -1)
+    results = split_location_on_cut(FeatureLocation(5, 12, Strand.REVERSE), 7).parts
+    expected = [
+        Exon(5, 7, Strand.REVERSE), Exon(7, 12, Strand.REVERSE)
     ]
-    compound = CompoundLocation([FeatureLocation(5, 12, 1), FeatureLocation(15, 21, 1)])
-    assert split_location_on_cut(compound, 13) == compound
+    assert results == expected, (results, expected)
+    compound = CompoundLocation([Exon(5, 12, Strand.FORWARD), Exon(15, 21, Strand.FORWARD)])
+    result = split_location_on_cut(compound, 13)
+    assert result.exons == compound.exons
+    assert result.strand == compound.strand
+    assert result.operator == compound.operator
+    assert result == compound, (str(result), str(compound))
 
 # ensure the splitting function works as expected, since other tests rely on it
 # and since it won't run automatically due to file naming, manually test it here

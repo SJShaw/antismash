@@ -115,6 +115,7 @@ def main(args: List[str]) -> int:
     try:
         return antismash.run_antismash(sequence, options)
     except antismash.common.errors.AntismashInputError as err:
+        raise
         if not str(err):
             raise
         print("ERROR:", str(err), file=sys.stderr)

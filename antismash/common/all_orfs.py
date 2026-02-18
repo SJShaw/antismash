@@ -169,7 +169,7 @@ def create_feature_from_location(record: Record, location: Location,
             label = f"allorf_{location.parts[0].start + 1:0{digits}}_{location.parts[1].end:0{digits}}"
         else:
             label = 'allorf_{start:0{digits}}_{end:0{digits}}'.format(
-                digits=digits, start=(location.start + 1), end=location.end
+                digits=digits, start=(int(location.start) + 1), end=int(location.end)
             )
     translation = str(record.get_aa_translation_from_location(location))
     # always start with methionine for CDS features, even if it had an alternate start codon

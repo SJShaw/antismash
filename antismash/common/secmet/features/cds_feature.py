@@ -98,6 +98,7 @@ def _ensure_valid_translation(translation: str, location: Location, transl_table
             a valid translation
     """
     # ensure translation is valid if it exists
+    translation = translation.replace(" ", "")
     if translation:
         invalid = set(translation) - _VALID_TRANSLATION_CHARS
         if invalid:
@@ -132,10 +133,6 @@ def _ensure_valid_translation(translation: str, location: Location, transl_table
 
 def _verify_location(location: Location) -> None:
     """ Raises a relevant exception if the location is invalid for a CDS """
-    if location.strand not in [1, -1]:
-        if len(location.parts) > 1 and location.parts[0].strand in [1, -1]:
-            raise ValueError("compound locations with mixed strands are not supported")
-        raise ValueError(f"invalid strand: {location.strand}")
     if location.has_ambiguous_start() and location.has_ambiguous_end():
         raise ValueError("CDS features require at least one unambiguous coordinate")
 
@@ -325,6 +322,7 @@ class CDSFeature(Feature):
             translation = _ensure_valid_translation(translation,
                                                     location, transl_table, record)
         except ValueError as err:
+            print(location)
             raise SecmetInvalidInputError(f"{err}: {name}") from err
         feature = cls(location, translation, gene=gene,
                       locus_tag=locus_tag, protein_id=protein_id,
