@@ -84,6 +84,7 @@ class _Location(__Location):
         if len(exons) == 1:
             strand = exons[0].strand
         super().__init__(exons, op, strand)
+        self._end = max(exon.stop for exon in self.exons)
 #        import logging; logging.critical("TODO: direct assignment (self.exons = []) should be working, but isn't")
 #        self.exons = [Exon.from_external(exon) for exon in self.exons]
 # vs
@@ -94,15 +95,15 @@ class _Location(__Location):
 
     @property
     def end(self) -> int:
-        return max(exon.stop for exon in self.exons)
+        return self._end
 
     def get_comparator(self: T) -> tuple[int, int]:
         """Get a comparison helper tuple consisting of start position and length."""
-        start = self.start
-        end = self.end
+        start = int(self.start)
+        end = int(self.end)
         if self.crosses_origin():
             _, head = split_origin_bridging_location(self)
-            start = min(part.start for part in head) - max(part.end for part in head)
+            start = int(min(part.start for part in head) - max(part.end for part in head))
             end = len(self)
         if not isinstance(start, int):
             return (-1, id(self))
@@ -506,7 +507,7 @@ def connect_locations(locations: list[Location], wrap_point: int = None) -> Loca
     if wrap_point is None:
         start = min(loc.start for loc in locations)
         end = max(loc.end for loc in locations)
-        strand = locations[0].strand if all(loc.strand == locations[0].strand for loc in locations) else None
+        strand = locations[0].strand if all(loc.strand == locations[0].strand for loc in locations) else Strand.UNSTRANDED
         return FeatureLocation(start, end, strand=strand)
 
     assert wrap_point > 0

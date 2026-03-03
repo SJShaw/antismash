@@ -515,6 +515,7 @@ class Conditions:
         """ Increments hit counter if satisfied and returns whether or not all
             conditions were satisfied.
         """
+        assert details.cds in details.features_by_id, details
         satisfied = self.is_satisfied(details, local_only)
         if satisfied and satisfied.matches:
             self.hits += 1

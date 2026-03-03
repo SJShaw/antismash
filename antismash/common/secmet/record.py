@@ -584,8 +584,9 @@ class Record:
         # so those need to be passed over, but once the first fully contained feature
         # is found, no further excluded overlaps can be skipped
         has_yet_to_be_contained = True
-        while index < len(self._cds_features):
-            feature = self._cds_features[index]
+        feats = sorted(self._cds_features)
+        while index < len(feats):
+            feature = feats[index]
             if feature.is_contained_by(location):
                 has_yet_to_be_contained = False
                 results.append(feature)
@@ -593,7 +594,7 @@ class Record:
                 results.append(feature)
             elif has_yet_to_be_contained:
                 pass
-            elif index + 1 < len(self._cds_features) and self._cds_features[index + 1].is_contained_by(feature):
+            elif index + 1 < len(feats) and feats[index + 1].is_contained_by(feature):
                 pass
             else:
                 break

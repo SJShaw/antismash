@@ -788,6 +788,7 @@ def apply_cluster_rules(record: Record, results_by_id: Dict[str, List[ProfileHit
                 location = _extend_area_location(location, rule.cutoff, record)
                 circular_origin = len(record) if len(location.parts) > 1 and record.is_circular() else 0
                 nearby = record.get_cds_features_within_location(location, with_overlapping=True)
+                assert feature in nearby, feature.is_contained_by(location)
                 nearby_features = {neighbour.get_name(): neighbour for neighbour in nearby}
                 nearby_results = {neighbour: results_by_id[neighbour]
                                   for neighbour in nearby_features if neighbour in results_by_id}
