@@ -12,6 +12,21 @@ import sys
 from typing import Any, Dict, List
 
 from antismash.common import json
+from antismash.common.secmet.locations import location_from_string
+from antismash.config.args import ReadableFullPathAction
+from antismash.modules import (
+    lanthipeptides,
+    lassopeptides,
+    sactipeptides,
+    thiopeptides,
+)
+
+RIPP_MODULES = [
+    lanthipeptides,
+    lassopeptides,
+    sactipeptides,
+    thiopeptides,
+]
 
 
 @dataclass
@@ -234,8 +249,8 @@ def write_data(entries: List[Entry], metadata: Metadata, version: str,
             None
     """
     assert base_path, "missing base output path"
-    if os.path.sep in args.version:
-        raise ValueError(f"Version contains path separators: {args.version}")
+    if os.path.sep in version:
+        raise ValueError(f"Version contains path separators: {version}")
 
     real_dir = os.path.join(base_path, version)
 
@@ -318,7 +333,7 @@ if __name__ == "__main__":
                             "Directory containing antiSMASH output directories"
                             " (or MIBiG JSON, if --mibig also given)"
                         ))
-    parser.add_argument("--lof", default=None, type=argparse.FileType("r"),
+    parser.add_argument("--lof", default=None, type=str, action=ReadableFullPathAction,
                         help="A file containiner paths to JSON files, one per line")
     parser.add_argument("--version", type=str, required=True,
                         help="Specify version of the database")
@@ -328,7 +343,7 @@ if __name__ == "__main__":
                         help="Use default antiSMASH-DB compatible metadata")
     parser.add_argument("--output-base-dir", type=str, required=True,
                         help="Base directory to add files to, a subdirectory with --version will be used")
-    parser.add_argument("--metadata-core", default=None, type=argparse.FileType("r"))
+    parser.add_argument("--metadata-core", default=None, type=str, action=ReadableFullPathAction)
 
     args = parser.parse_args()
 
@@ -339,27 +354,18 @@ if __name__ == "__main__":
         print("Both '--data' and '--lof' were provided, only one can be used", file=sys.stderr)
         sys.exit(1)
 
-    if args.asdb:
-        # having this import here avoids needing it at all for mibig mode
-        # the "from" method of importing is required to work around a mypy issue
-        from antismash.modules import (
-            lanthipeptides,
-            lassopeptides,
-            sactipeptides,
-            thiopeptides,
-        )
-        from antismash.common.secmet.locations import location_from_string
-        RIPP_MODULES = [
-            lanthipeptides,
-            lassopeptides,
-            sactipeptides,
-            thiopeptides,
-        ]
-
     try:
-        main(args.output_base_dir, args.version, data_dir=args.data, mibig=args.mibig, asdb=args.asdb,
-             file_list=args.lof.read().splitlines() if args.lof else None,
-             metadata=Metadata(**json.load(args.metadata_core)) if args.metadata_core else None)
-    except (ValueError, OSError) as err:
+        file_list: list[str] | None = None
+        metadata: Metadata | None = None
+        if args.lof:
+            with open(args.lof, "r", encoding="utf-8") as handle:
+                file_list = handle.read().splitlines()
+        if args.metadata_core:
+            with open(args.metadata_core, "r", encoding="utf-8") as handle:
+                metadata = Metadata(**json.load(handle))
+        main(args.output_base_dir, args.version, data_dir=args.data,
+             mibig=args.mibig, asdb=args.asdb,
+             file_list=file_list, metadata=metadata)
+    except (FileNotFoundError, OSError, ValueError) as err:
         print(err, file=sys.stderr)
         sys.exit(1)
