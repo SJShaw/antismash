@@ -6,15 +6,16 @@
 Helper script to generate a hmmdetails.txt line for the given profile
 """
 
-from argparse import ArgumentParser, FileType
+from argparse import ArgumentParser
 import math
 import os
+import pathlib
 from typing import IO
 
 
 def _main() -> None:
     parser = ArgumentParser()
-    parser.add_argument("profile", type=FileType('r', encoding="utf-8"),
+    parser.add_argument("profile", type=pathlib.Path,
                         help="HMM file to extract info from")
     parser.add_argument("-n", "--name", type=str, default="",
                         help="Custom name to override the profile's name with")
@@ -24,7 +25,8 @@ def _main() -> None:
                         help="Custom cutoff value, to override the profile or cover a missing TC line")
     args = parser.parse_args()
 
-    print(run(args.profile, args.name, args.description, args.cutoff))
+    with open(args.profile.resolve(), "r", encoding="utf-8") as handle:
+        print(run(handle, args.name, args.description, args.cutoff))
 
 
 def run(profile: IO, name: str = "", description: str = "", cutoff: int = -1) -> str:
